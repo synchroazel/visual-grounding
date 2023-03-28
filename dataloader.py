@@ -56,6 +56,8 @@ class RefCOCOg(Dataset):
     def __getitem__(self, idx):
         ann_data = self.annotations[idx]
 
+        # print(ann_data)
+
         image_path = os.path.join(
             self.ds_path,
             "images",
