@@ -1,8 +1,10 @@
 import clip
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from PIL import Image
+from torchvision.ops import box_iou
 
 
 class YOLOv5:
@@ -19,7 +21,8 @@ class YOLOv5:
         results = self.yolo_model(img_path)
 
         if not self.quiet:
-            results.show()
+            # results.show()
+            pass
 
         results = results.pandas().xyxy[0]
 
@@ -81,17 +84,27 @@ class YOCO:
 
         self.dist_metric = dist_metric
 
-    def __call__(self, img_path, prompt):
+    def __call__(self, img_sample, prompt):
 
         if not self.quiet:
             print("[INFO] Running YOLO on the image...")
 
-        yolo_results = self.yolo_model(img_path)
+        yolo_results = self.yolo_model(img_sample.path)
 
         if not self.quiet:
             print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
 
-        img = Image.open(img_path)
+        # In case YOLO doesn't find any object, what should we do?
+
+        if yolo_results.shape[0] == 0:
+            return {
+                "cosine": np.nan,  # what should we do?
+                "euclidean": np.nan,  # what should we do?
+                "iou": 0.0,
+                "recall": 0.0
+            }
+
+        img = Image.open(img_sample.path)
 
         imgs_encoding = list()
 
@@ -119,30 +132,99 @@ class YOCO:
         e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
 
         if self.dist_metric == "euclidean":
-            best_idx = int(e_dists.argmin())
+            dists = e_dists
         else:
-            best_idx = int(c_sims.argmin())
+            dists = c_sims
 
-        # TODO: implement Intersection over Union (IoU)
+        # Find the object with the minimum distance to the prompt
 
-        # TODO: implement Recall
+        best_idx = int(dists.argmin())
+
+        sorted_idxs = np.argsort(dists)
+
+        obj = yolo_results.iloc[best_idx]
+
+        pred_bbox = obj[0:4].tolist()
+
+        gt_bbox = img_sample.bbox
+
+        gt_bbox = [gt_bbox[0], gt_bbox[1], gt_bbox[0] + gt_bbox[2], gt_bbox[1] + gt_bbox[3]]
+
+        # Compute the Intersection over Union (IoU) between the predicted and ground-truth bboxes
+
+        tensor_pred_bbox = torch.tensor([pred_bbox])
+        tensor_gt_bbox = torch.tensor([gt_bbox])
+
+        iou = box_iou(tensor_pred_bbox, tensor_gt_bbox)
+
+        ### UNSURE ABOUT THIS PART ###
+
+        # Compute the Recall@K metric
+        # MAYBE: https://ar5iv.labs.arxiv.org/html/2206.15462 ??
+
+        k = 3
+
+        if yolo_results.shape[0] < k:
+            k = yolo_results.shape[0]
+
+        recall_at_k = 0
+
+        for i in range(k):
+
+            cur_obj = yolo_results.iloc[int(sorted_idxs[i])]
+
+            pred_bbox = cur_obj[0:4].tolist()
+
+            gt_bbox = img_sample.bbox
+
+            gt_bbox = [gt_bbox[0], gt_bbox[1], gt_bbox[0] + gt_bbox[2], gt_bbox[1] + gt_bbox[3]]
+
+            tensor_pred_bbox = torch.tensor([pred_bbox])
+            tensor_gt_bbox = torch.tensor([gt_bbox])
+
+            iou = box_iou(tensor_pred_bbox, tensor_gt_bbox)
+
+            if iou > 0.5:
+                recall_at_k = 1
+                break
+
+        ### END  ###
+
+        # TODO: check if recall implementation is correct
 
         if not self.quiet:
             # Display the image with the bbox for the object chosen
-            ans = yolo_results.iloc[best_idx]
 
-            best_bbox = ans[0:4].tolist()
-
-            rect = patches.Rectangle(
-                (best_bbox[0], best_bbox[1]), best_bbox[2] - best_bbox[0], best_bbox[3] - best_bbox[1],
+            pred_rect = patches.Rectangle(
+                (pred_bbox[0], pred_bbox[1]), pred_bbox[2] - pred_bbox[0], pred_bbox[3] - pred_bbox[1],
                 linewidth=1.5, edgecolor=(0, 1, 0), facecolor='none'
+            )
+
+            gt_rect = patches.Rectangle(
+                (gt_bbox[0], gt_bbox[1]), gt_bbox[2] - gt_bbox[0], gt_bbox[3] - gt_bbox[1],
+                linewidth=1.5, edgecolor=(1, 0, 0), facecolor='none'
             )
 
             fig, ax = plt.subplots()
             ax.imshow(img)
-            ax.add_patch(rect)
+
+            ax.add_patch(pred_rect)
+            ax.text(pred_bbox[0], pred_bbox[1], "predicted", color=(1, 1, 1),
+                    bbox={"facecolor": (0, 1, 0), "pad": 2, "color": (0, 1, 0)})
+
+            ax.add_patch(gt_rect)
+            ax.text(gt_bbox[0], gt_bbox[3], "true", color=(1, 1, 1),
+                    bbox={"facecolor": (1, 0, 0), "pad": 2, "color": (1, 0, 0)})
+
             ax.axis("off")
-            plt.title(f"\"{prompt.capitalize()}\"")
+            plt.title(f"\"{prompt.capitalize()}\"\n")
             plt.show()
 
-        return {"cosine": float(c_sims.min()), "euclidean": float(e_dists.min())}
+            plt.close(fig)
+
+        return {
+            "cosine": float(c_sims.min()),
+            "euclidean": float(e_dists.min()),
+            "iou": float(iou),
+            "recall": recall_at_k
+        }

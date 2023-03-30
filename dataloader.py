@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 import re
@@ -16,7 +17,7 @@ class RefCOCOgSample:
 
     # TODO: add or remove attributes as needed.
 
-    def __init__(self, img, shape, path, img_id, category_id, sentences, split):
+    def __init__(self, img, shape, path, img_id, category_id, sentences, split, bbox, segmentation):
         self.img = img
         self.shape = shape
         self.path = path
@@ -24,15 +25,11 @@ class RefCOCOgSample:
         self.category_id = category_id
         self.sentences = sentences
         self.split = split
+        self.bbox = bbox
+        self.segmentation = segmentation
 
     def __repr__(self):
-        return f"RefCOCOgSample(\n\tid={self.id}," \
-               f"\n\tpath={self.path}," \
-               f"\n\tshape={self.shape}," \
-               f"\n\tcategory_id={self.category_id}," \
-               f"\n\tsentences={self.sentences}," \
-               f"\n\tsplit={self.split}" \
-               f"\n)"
+        return str(vars(self))
 
 
 class RefCOCOg(Dataset):
@@ -49,19 +46,29 @@ class RefCOCOg(Dataset):
         self.ds_path = ds_path
 
         with open(f'{ds_path}/annotations/refs(umd).p', 'rb') as f:
-            self.annotations = pickle.load(f)
+            self.refs = pickle.load(f)
 
-        self.size = len(self.annotations)
+        with open(f"{ds_path}/annotations/instances.json", "r") as f:
+            self.instances = json.load(f)
+
+        self.categories = self.instances['categories']
+
+        self.size = len(self.refs)
 
     def __getitem__(self, idx):
-        ann_data = self.annotations[idx]
 
-        # print(ann_data)
+        refs_data = self.refs[idx]
+
+        for inst in self.instances['annotations']:
+            # if inst['image_id'] == refs_data['image_id']:
+            if inst['id'] == refs_data['ann_id']:
+                ann_data = inst
+                break
 
         image_path = os.path.join(
             self.ds_path,
             "images",
-            re.sub(r"_[0-9]+\.jpg", ".jpg", ann_data["file_name"])
+            re.sub(r"_[0-9]+\.jpg", ".jpg", refs_data["file_name"])
             # "_".join(ann_data["file_name"].split("_")[:-1])+".jpg"
         )
 
@@ -73,10 +80,12 @@ class RefCOCOg(Dataset):
             img=tensor_img,
             shape=tensor_img.shape,
             path=image_path,
-            img_id=ann_data["image_id"],
-            category_id=ann_data["category_id"],
-            sentences=[sentence["raw"].lower() for sentence in ann_data["sentences"]],
-            split=ann_data["split"],
+            img_id=refs_data["image_id"],
+            category_id=refs_data["category_id"],
+            sentences=[sentence["raw"].lower() for sentence in refs_data["sentences"]],
+            split=refs_data["split"],
+            bbox=ann_data["bbox"],
+            segmentation=ann_data["segmentation"]
         )
 
         if self.transform:
