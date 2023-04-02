@@ -5,23 +5,6 @@ Link to the OpenAI CLIP repo
 
 ## Literature
 
-- "A Review of Visual Grounding Tasks in Natural Language Processing" by Raffaella Bernardi et al. (2020) - This article
-  provides an overview of the different visual grounding tasks that have been studied in the context of natural language
-  processing (NLP), including image captioning, visual question answering, and referring expression comprehension.
-- "Neural Network Models for Visual Grounding: A Survey" by Rohan Chandra et al. (2021) - This survey paper provides an
-  in-depth look at various neural network models that have been used for visual grounding tasks, including convolutional
-  neural networks (CNNs), recurrent neural networks (RNNs), and transformers.
-- "A Dataset of Spatial Descriptions for Visual Grounding" by Dima Damen et al. (2018) - This paper introduces a dataset
-  of spatial descriptions for visual grounding, which can be used to train and evaluate models for tasks such as
-  referring expression comprehension.
-- "Learning Visual Attributes for Visual Grounding" by Lisa Anne Hendricks et al. (2018) - This paper proposes a model
-  for learning visual attributes that can be used for visual grounding tasks such as referring expression comprehension
-  and image retrieval.
-- "Language Grounding in Deep Neural Networks" by Kyunghyun Cho et al. (2021) - This review paper discusses various
-  approaches to language grounding in deep neural networks, including visual grounding and semantic grounding, and
-  provides an overview of the challenges and future directions in this area.
-
-References by the assignment paper:
 
 - Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda
   Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural language supervision. In
