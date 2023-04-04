@@ -70,15 +70,22 @@ class YOCO:
 
     """
 
-    def __init__(self, yolo_ver="yolov5s", clip_ver="RN50", device="cpu", quiet=True, dist_metric="euclidean"):
+    def __init__(self, categories, yolo_ver="yolov5s", clip_ver="RN50", device="cpu", quiet=True,
+                 dist_metric="euclidean"):
         self.yolo_model = YOLOv5(yolo_ver, quiet=quiet)
         self.clip_model = CLIP(clip_ver, quiet=quiet)
         self.quiet = quiet
         self.device = device
+        self.categories = categories
+
+        for category_id in categories.keys():
+            cur_category = categories[category_id]['category']
+            cur_category_enc = self.clip_model(f"a picture of {cur_category}")
+            categories[category_id].update({"encoding": cur_category_enc})
 
         # TODO: maybe add more metrics for the distance?
 
-        valid_metrics = ["euclidean", "cosine"]
+        valid_metrics = ["euclidean", "cosine", "dotproduct"]
         if dist_metric not in valid_metrics:
             raise ValueError(f"Invalid metric '{dist_metric}'. Must be one of {valid_metrics}.")
 
@@ -97,12 +104,7 @@ class YOCO:
         # In case YOLO doesn't find any object, what should we do?
 
         if yolo_results.shape[0] == 0:
-            return {
-                "cosine": np.nan,  # what should we do?
-                "euclidean": np.nan,  # what should we do?
-                "iou": 0.0,
-                "recall": 0.0
-            }
+            raise ValueError("YOLO didn't find any object in the image!")
 
         img = Image.open(img_sample.path)
 
@@ -125,72 +127,68 @@ class YOCO:
 
         text_encoding = self.clip_model(prompt)
 
-        # Compute the Cosine similarity between the prompt and each object
+        pred_bbox_idx = dict()
+
+        # Dot product similarity
+        d_sims = torch.mm(text_encoding, imgs_encoding.t()).squeeze()
+
+        # Cosine similarity
         c_sims = torch.nn.functional.cosine_similarity(text_encoding, imgs_encoding, dim=1).squeeze()
 
-        # Compute the Euclidean distance between the prompt and each object
+        # Euclidean distance
         e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
 
-        if self.dist_metric == "euclidean":
-            dists = e_dists
-        else:
-            dists = c_sims
+        pred_bbox_idx["dotproduct"] = int(d_sims.argmax())
+        pred_bbox_idx["cosine"] = int(c_sims.argmax())
+        pred_bbox_idx["euclidean"] = int(e_dists.argmin())
 
-        # Find the object with the minimum distance to the prompt
+        # index of the best bounding box according to chosen metric
+        best_idx = pred_bbox_idx[self.dist_metric]
 
-        best_idx = int(dists.argmin())
+        # Compute the Intersection over Union (IoU)
 
-        sorted_idxs = np.argsort(dists)
-
-        obj = yolo_results.iloc[best_idx]
-
-        pred_bbox = obj[0:4].tolist()
+        pred_bbox = yolo_results.iloc[best_idx, 0:4].tolist()
 
         gt_bbox = img_sample.bbox
-
         gt_bbox = [gt_bbox[0], gt_bbox[1], gt_bbox[0] + gt_bbox[2], gt_bbox[1] + gt_bbox[3]]
 
-        # Compute the Intersection over Union (IoU) between the predicted and ground-truth bboxes
+        iou = box_iou(
+            torch.tensor([pred_bbox]),
+            torch.tensor([gt_bbox])
+        )
 
-        tensor_pred_bbox = torch.tensor([pred_bbox])
-        tensor_gt_bbox = torch.tensor([gt_bbox])
+        # Check visual grounding accuracy
 
-        iou = box_iou(tensor_pred_bbox, tensor_gt_bbox)
+        pred_img = img.crop(pred_bbox)
+        pred_img_enc = self.clip_model(pred_img)
 
-        ### UNSURE ABOUT THIS PART ###
+        pred_bbox_categ = dict()
 
-        # Compute the Recall@K metric
-        # MAYBE: https://ar5iv.labs.arxiv.org/html/2206.15462 ??
+        all_d_sims, all_c_sims, all_e_dists = dict(), dict(), dict()
 
-        k = 3
+        for category_id in self.categories.keys():
+            cur_categ = self.categories[category_id]['category']
+            cur_categ_enc = self.categories[category_id]['encoding']
+            all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
+            all_c_sims[cur_categ] = torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
+            all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc, p=2).squeeze()
 
-        if yolo_results.shape[0] < k:
-            k = yolo_results.shape[0]
+        pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
+        pred_bbox_categ["cosine"] = max(all_c_sims, key=all_c_sims.get)
+        pred_bbox_categ["euclidean"] = min(all_e_dists, key=all_e_dists.get)
 
-        recall_at_k = 0
+        # category of the best bounding box according to chosen metric
+        pred_category = pred_bbox_categ[self.dist_metric]
 
-        for i in range(k):
+        # If the category with the highest cosine similarity is the same
+        # as the ground truth category, then the grounding is correct
 
-            cur_obj = yolo_results.iloc[int(sorted_idxs[i])]
+        grd_correct = 1 if pred_category == img_sample.category else 0
 
-            pred_bbox = cur_obj[0:4].tolist()
+        if not self.quiet:
+            print(f"[INFO] g.t. category: {img_sample.category} | pred. category: {pred_category}")
 
-            gt_bbox = img_sample.bbox
-
-            gt_bbox = [gt_bbox[0], gt_bbox[1], gt_bbox[0] + gt_bbox[2], gt_bbox[1] + gt_bbox[3]]
-
-            tensor_pred_bbox = torch.tensor([pred_bbox])
-            tensor_gt_bbox = torch.tensor([gt_bbox])
-
-            iou = box_iou(tensor_pred_bbox, tensor_gt_bbox)
-
-            if iou > 0.5:
-                recall_at_k = 1
-                break
-
-        ### END  ###
-
-        # TODO: check if recall implementation is correct
+        # TODO: implement Recall
 
         if not self.quiet:
             # Display the image with the bbox for the object chosen
@@ -226,5 +224,5 @@ class YOCO:
             "cosine": float(c_sims.min()),
             "euclidean": float(e_dists.min()),
             "iou": float(iou),
-            "recall": recall_at_k
+            "recall": float(grd_correct)
         }
