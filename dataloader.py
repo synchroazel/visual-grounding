@@ -17,14 +17,13 @@ class RefCOCOgSample:
 
     # TODO: add or remove attributes as needed.
 
-    def __init__(self, img, shape, path, img_id, category_id, sentences, split, bbox, segmentation):
+    def __init__(self, img, shape, path, img_id, category, sentences, bbox, segmentation):
         self.img = img
         self.shape = shape
         self.path = path
         self.id = img_id
-        self.category_id = category_id
+        self.category = category
         self.sentences = sentences
-        self.split = split
         self.bbox = bbox
         self.segmentation = segmentation
 
@@ -51,7 +50,13 @@ class RefCOCOg(Dataset):
         with open(f"{ds_path}/annotations/instances.json", "r") as f:
             self.instances = json.load(f)
 
-        self.categories = self.instances['categories']
+        self.categories = {
+            item["id"]: {
+                "supercategory": item["supercategory"],
+                "category": item["name"]
+            }
+            for item in self.instances['categories']
+        }
 
         self.size = len(self.refs)
 
@@ -81,9 +86,8 @@ class RefCOCOg(Dataset):
             shape=tensor_img.shape,
             path=image_path,
             img_id=refs_data["image_id"],
-            category_id=refs_data["category_id"],
+            category=self.categories[refs_data["category_id"]]["category"],
             sentences=[sentence["raw"].lower() for sentence in refs_data["sentences"]],
-            split=refs_data["split"],
             bbox=ann_data["bbox"],
             segmentation=ann_data["segmentation"]
         )

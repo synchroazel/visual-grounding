@@ -1,7 +1,6 @@
 import clip
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from PIL import Image
 from torchvision.ops import box_iou
@@ -169,16 +168,16 @@ class YOCO:
         for category_id in self.categories.keys():
             cur_categ = self.categories[category_id]['category']
             cur_categ_enc = self.categories[category_id]['encoding']
-            all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
+            #all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
             all_c_sims[cur_categ] = torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
-            all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc, p=2).squeeze()
+            #all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc, p=2).squeeze()
 
-        pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
+        #pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
         pred_bbox_categ["cosine"] = max(all_c_sims, key=all_c_sims.get)
-        pred_bbox_categ["euclidean"] = min(all_e_dists, key=all_e_dists.get)
+        #pred_bbox_categ["euclidean"] = min(all_e_dists, key=all_e_dists.get)
 
         # category of the best bounding box according to chosen metric
-        pred_category = pred_bbox_categ[self.dist_metric]
+        pred_category = pred_bbox_categ["cosine"]  # pred_bbox_categ[self.dist_metric]
 
         # If the category with the highest cosine similarity is the same
         # as the ground truth category, then the grounding is correct
