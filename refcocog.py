@@ -16,12 +16,16 @@ class RefCOCOgSample:
 
     """
 
-    # TODO: add or remove attributes as needed.
-
-    # TODO: type hinting
-
-    def __init__(self, img, shape, path, img_id, category, sentences, bbox, segmentation):
-        self.img = img  # TODO: make PIL image
+    def __init__(self,
+                 img: Image.Image,
+                 shape: tuple[int, int],
+                 path: str,
+                 img_id: str,
+                 category: str,
+                 sentences: list[str],
+                 bbox: list[float],
+                 segmentation: list[float]):
+        self.img = img
         self.shape = shape
         self.path = path
         self.id = img_id
@@ -40,7 +44,7 @@ class RefCOCOg(Dataset):
 
     """
 
-    def __init__(self, ds_path, transform=None):
+    def __init__(self, ds_path: str, transform=None):
         super(RefCOCOg, self).__init__()
 
         self.transform = transform
@@ -63,7 +67,7 @@ class RefCOCOg(Dataset):
 
         self.size = len(self.refs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
 
         refs_data = self.refs[idx]
 
@@ -81,25 +85,12 @@ class RefCOCOg(Dataset):
 
         pil_img = Image.open(image_path)
 
-        tensor_img = transforms.ToTensor()(pil_img)
-
         bbox = torch.tensor(ann_data["bbox"])
         bbox = box_convert(bbox, "xywh", "xyxy").numpy()
 
-        # sample = RefCOCOgSample(
-        #     img=tensor_img,
-        #     shape=tensor_img.shape,
-        #     path=image_path,
-        #     img_id=refs_data["image_id"],
-        #     category=self.categories[refs_data["category_id"]]["category"],
-        #     sentences=[sentence["raw"].lower() for sentence in refs_data["sentences"]],
-        #     bbox=bbox,
-        #     segmentation=ann_data["segmentation"]
-        # )
-
         sample = {
-            "img": tensor_img,
-            "shape": tensor_img.shape,
+            "img": pil_img,
+            "shape": transforms.ToTensor()(pil_img).shape,
             "path": image_path,
             "img_id": refs_data["image_id"],
             "category": self.categories[refs_data["category_id"]]["category"],

@@ -16,7 +16,7 @@ class YOLOv5:
         self.yolo_model = torch.hub.load('ultralytics/yolov5', yolo_ver, pretrained=True, device=device)
         self.quiet = quiet
 
-    def __call__(self, img_path):
+    def __call__(self, img_path: str):
         results = self.yolo_model(img_path)
 
         if not self.quiet:
@@ -39,7 +39,7 @@ class CLIP:
         self.quiet = quiet
         self.device = device
 
-    def __call__(self, content):
+    def __call__(self, content: str or Image.Image):
 
         if isinstance(content, str):
             text = clip.tokenize(content).to(self.device)
@@ -67,7 +67,12 @@ class YoloClip:
 
     """
 
-    def __init__(self, categories, yolo_ver="yolov5s", clip_ver="RN50", device="cpu", quiet=True,
+    def __init__(self,
+                 categories: dict,
+                 yolo_ver="yolov5s",
+                 clip_ver="RN50",
+                 device="cpu",
+                 quiet=True,
                  dist_metric="euclidean"):
         self.yolo_model = YOLOv5(yolo_ver, quiet=quiet)
         self.clip_model = CLIP(clip_ver, quiet=quiet)
@@ -77,10 +82,8 @@ class YoloClip:
 
         for category_id in categories.keys():
             cur_category = categories[category_id]['category']
-            cur_category_enc = self.clip_model(f"a picture of {cur_category}")
+            cur_category_enc = self.clip_model(f"a photo of {cur_category}")
             categories[category_id].update({"encoding": cur_category_enc})
-
-        # TODO: maybe add more metrics for the distance?
 
         valid_metrics = ["euclidean", "cosine", "dotproduct"]
         if dist_metric not in valid_metrics:
@@ -92,7 +95,7 @@ class YoloClip:
 
         # 1. Use YOLO to find relevant objects
 
-        img = Image.open(img_sample.path)
+        img = img_sample.img
 
         if not self.quiet:
             print("[INFO] Running YOLO on the image...")
@@ -182,14 +185,14 @@ class YoloClip:
             cur_categ_enc = self.categories[category_id]['encoding']
             all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
             all_c_sims[cur_categ] = torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
-            all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc, p=2).squeeze()
+            all_e_dists[cur_categ] = torch.nn.functional.pairwise_distance(pred_img_enc, cur_categ_enc)  # torch.cdist(pred_img_enc, cur_categ_enc).squeeze()
 
         pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
         pred_bbox_categ["cosine"] = max(all_c_sims, key=all_c_sims.get)
         pred_bbox_categ["euclidean"] = min(all_e_dists, key=all_e_dists.get)
 
         # category of the best bounding box according to chosen metric
-        pred_category = pred_bbox_categ[self.dist_metric]
+        pred_category = pred_bbox_categ["dotproduct"]
 
         # If the category with the highest cosine similarity is the same
         # as the ground truth category, then the grounding is correct
