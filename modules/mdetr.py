@@ -7,7 +7,7 @@ from torchvision.ops import box_iou
 from torchvision.ops.boxes import box_convert
 from transformers import RobertaTokenizerFast
 
-from vgutils import display_preds
+from modules.utils import display_preds
 
 medtr_cpt_url = "https://pytorch.s3.amazonaws.com/models/multimodal/mdetr/pretrained_resnet101_checkpoint.pth"
 
@@ -71,17 +71,6 @@ class MDETRvg():
         pred_bbox = mdetr_results.iloc[0, :4].tolist()
         best_prob = mdetr_results.iloc[0, 4]
         gt_bbox = img_sample.bbox
-
-        # # Extract the text spans predicted by each box
-        # positive_tokens = (out.pred_logits[0, keep].softmax(-1) > 0.1).nonzero().tolist()
-        # predicted_spans = defaultdict(str)
-        # for tok in positive_tokens:
-        #     item, pos = tok
-        #     if pos < 255:
-        #         span = enc_text.token_to_chars(0, pos)
-        #         predicted_spans[item] += " " + prompt[span.start:span.end]
-        # boxes_scaled = [boxes_scaled[int(k)] for k in sorted(list(predicted_spans.keys()))]
-        # labels = [predicted_spans[k] for k in sorted(list(predicted_spans.keys()))]
 
         # Compute Intersection over Union (IoU)
 
