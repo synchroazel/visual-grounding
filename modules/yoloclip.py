@@ -32,6 +32,17 @@ def display_preds(img, prompt, pred_bbox, gt_bbox, model_name):
     plt.show()
 
 
+def cosine_similarity(images_z: torch.Tensor, texts_z: torch.Tensor):
+    # normalise the image and the text
+    images_z /= images_z.norm(dim=-1, keepdim=True)
+    texts_z /= texts_z.norm(dim=-1, keepdim=True)
+
+    # evaluate the cosine similarity between the sets of features
+    similarity = (texts_z @ images_z.T)
+
+    return similarity.cpu()
+
+
 class YoloClip:
     """
     A wrapper around YOLO and CLIP to perform visual grounding given an image and a prompt.
@@ -55,7 +66,10 @@ class YoloClip:
         for category_id in categories.keys():
             cur_category = categories[category_id]['category']
             cur_category_text = clip.tokenize(f"a photo of {cur_category}").to(self.device)
-            cur_category_enc = self.clip_model.encode_text(cur_category_text)
+
+            with torch.no_grad():
+                cur_category_enc = self.clip_model.encode_text(cur_category_text)
+
             categories[category_id].update({"encoding": cur_category_enc})
 
         valid_metrics = ["euclidean", "cosine", "dotproduct"]
@@ -97,7 +111,8 @@ class YoloClip:
             sub_img = img.crop(bbox)
             sub_img = self.clip_prep(sub_img).unsqueeze(0).to(self.device)
 
-            sub_img_enc = self.clip_model.encode_image(sub_img)
+            with torch.no_grad():
+                sub_img_enc = self.clip_model.encode_image(sub_img)
 
             imgs_encoding.append(sub_img_enc)
 
@@ -110,7 +125,8 @@ class YoloClip:
 
         tk_prompt = clip.tokenize(prompt)
 
-        text_encoding = self.clip_model.encode_text(tk_prompt)
+        with torch.no_grad():
+            text_encoding = self.clip_model.encode_text(tk_prompt)
 
         # 3.1 Compute distance metrics and find the best object according to one of them
 
@@ -120,7 +136,7 @@ class YoloClip:
         d_sims = torch.mm(text_encoding, imgs_encoding.t()).squeeze()
 
         # Cosine similarity
-        c_sims = torch.nn.functional.cosine_similarity(text_encoding, imgs_encoding, dim=1).squeeze()
+        c_sims = cosine_similarity(text_encoding, imgs_encoding).squeeze()
 
         # Euclidean distance
         e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
@@ -150,7 +166,8 @@ class YoloClip:
         pred_img = img.crop(pred_bbox)
         pred_img = self.clip_prep(pred_img).unsqueeze(0).to(self.device)
 
-        pred_img_enc = self.clip_model.encode_image(pred_img)
+        with torch.no_grad():
+            pred_img_enc = self.clip_model.encode_image(pred_img)
 
         pred_bbox_categ = dict()
 
@@ -160,7 +177,7 @@ class YoloClip:
             cur_categ = self.categories[category_id]['category']
             cur_categ_enc = self.categories[category_id]['encoding']
             all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
-            all_c_sims[cur_categ] = torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
+            all_c_sims[cur_categ] = cosine_similarity(pred_img_enc, cur_categ_enc)  # torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
             all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc).squeeze()
 
         pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
@@ -184,7 +201,7 @@ class YoloClip:
             display_preds(img, prompt, pred_bbox, gt_bbox, model_name="YOLO+CLIP")
 
         return {
-            "cosine": float(c_sims.min()),
+            "cosine": float(c_sims.max()),
             "euclidean": float(e_dists.min()),
             "dotproduct": float(d_sims.max()),
             "iou": float(iou),
