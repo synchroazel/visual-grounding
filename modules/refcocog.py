@@ -21,7 +21,9 @@ class RefCOCOgSample:
                  shape: tuple[int, int],
                  path: str,
                  img_id: str,
+                 split: str,
                  category: str,
+                 category_id: int,
                  sentences: list[str],
                  bbox: list[float],
                  segmentation: list[float]):
@@ -29,7 +31,9 @@ class RefCOCOgSample:
         self.shape = shape
         self.path = path
         self.id = img_id
+        self.split = split
         self.category = category
+        self.category_id = category_id
         self.sentences = sentences
         self.bbox = bbox
         self.segmentation = segmentation
@@ -44,7 +48,7 @@ class RefCOCOg(Dataset):
 
     """
 
-    def __init__(self, ds_path: str, transform=None):
+    def __init__(self, ds_path: str, split=None, transform=None):
         super(RefCOCOg, self).__init__()
 
         self.transform = transform
@@ -65,7 +69,15 @@ class RefCOCOg(Dataset):
             for item in self.instances['categories']
         }
 
+        if split == 'train':
+            self.refs = [ref for ref in self.refs if ref['split'] == 'train']
+        elif split == 'val':
+            self.refs = [ref for ref in self.refs if ref['split'] == 'val']
+        elif split == 'test':
+            self.refs = [ref for ref in self.refs if ref['split'] == 'test']
+
         self.size = len(self.refs)
+
 
     def __getitem__(self, idx: int):
 
@@ -93,7 +105,9 @@ class RefCOCOg(Dataset):
             "shape": transforms.ToTensor()(pil_img).shape,
             "path": image_path,
             "img_id": refs_data["image_id"],
+            "split": refs_data["split"],
             "category": self.categories[refs_data["category_id"]]["category"],
+            "category_id": refs_data["category_id"],
             "sentences": [sentence["raw"].lower() for sentence in refs_data["sentences"]],
             "bbox": bbox,
             "segmentation": ann_data["segmentation"]
@@ -106,5 +120,3 @@ class RefCOCOg(Dataset):
 
     def __len__(self):
         return self.size  # return the number of annotated images available using `refs(umd).p`
-
-        # return len(os.listdir(f"{self.ds_path}/images"))  # return the number of total images available
