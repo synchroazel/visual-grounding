@@ -1,7 +1,0 @@
-clip==0.2.0
-matplotlib==3.6.0
-pandas==2.0.1
-Pillow==9.5.0
-torch==2.0.0
-torchvision==0.15.1
-transformers==4.28.1

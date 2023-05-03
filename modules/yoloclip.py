@@ -57,7 +57,7 @@ class YoloClip:
                  quiet=True,
                  dist_metric="euclidean"):
 
-        self.yolo_model = torch.hub.load('ultralytics/yolov5', yolo_ver, pretrained=True, device=device)
+        self.yolo_model = torch.hub.load('ultralytics/yolov5', yolo_ver, pretrained=True, device=device, force_reload=True)
         self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
         self.quiet = quiet
         self.device = device
