@@ -84,9 +84,6 @@ class YoloClip:
 
         img = img_sample.img
 
-        if not self.quiet:
-            print("[INFO] Running YOLO on the image...")
-
         yolo_results = self.yolo_model(img_sample.path)
         yolo_results = yolo_results.pandas().xyxy[0]
 
@@ -102,9 +99,6 @@ class YoloClip:
 
         imgs_encoding = list()
 
-        if not self.quiet:
-            print("[INFO] Running CLIP on detected objects...")
-
         for i in range(yolo_results.shape[0]):
             bbox = yolo_results.iloc[i, 0:4]
 
@@ -119,9 +113,6 @@ class YoloClip:
         imgs_encoding = torch.cat(imgs_encoding, dim=0)
 
         # 2.2 Use CLIP to encode the text prompt
-
-        if not self.quiet:
-            print("[INFO] Running CLIP on the prompt...")
 
         tk_prompt = clip.tokenize(prompt)
 
