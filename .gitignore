@@ -4,3 +4,4 @@ runs/
 **/__pycache__/
 **/.ipynb_checkpoints/
 *.pt
+yolov5/

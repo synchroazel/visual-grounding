@@ -2,7 +2,7 @@ import clip
 import matplotlib.pyplot as plt
 import torch
 from torchvision.ops import box_iou
-
+from ultralytics import YOLO
 
 def display_preds(img, prompt, pred_bbox, gt_bbox, model_name):
     fig, ax = plt.subplots()
@@ -51,13 +51,13 @@ class YoloClip:
 
     def __init__(self,
                  categories,
-                 yolo_ver="yolov5s",
+                 yolo_ver="yolov8x",
                  clip_ver="RN50",
                  device="cpu",
                  quiet=True,
                  dist_metric="euclidean"):
 
-        self.yolo_model = torch.hub.load('ultralytics/yolov5', yolo_ver, pretrained=True, device=device, force_reload=True)
+        self.yolo_model = YOLO(yolo_ver + ".pt")
         self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
         self.quiet = quiet
         self.device = device
@@ -84,8 +84,13 @@ class YoloClip:
 
         img = img_sample.img
 
-        yolo_results = self.yolo_model(img_sample.path)
-        yolo_results = yolo_results.pandas().xyxy[0]
+
+        if not self.quiet:
+            print("[INFO] Running YOLO on the image...")
+
+        yolo_results = self.yolo_model(img_sample.path)[0]
+        yolo_results = yolo_results.boxes.xyxy
+
 
         if not self.quiet:
             print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
@@ -100,13 +105,13 @@ class YoloClip:
         imgs_encoding = list()
 
         for i in range(yolo_results.shape[0]):
-            bbox = yolo_results.iloc[i, 0:4]
+            bbox = yolo_results[i, 0:4].cpu().numpy()
 
             sub_img = img.crop(bbox)
             sub_img = self.clip_prep(sub_img).unsqueeze(0).to(self.device)
 
             with torch.no_grad():
-                sub_img_enc = self.clip_model.encode_image(sub_img)
+                sub_img_enc = self.clip_model.encode_image(sub_img).to(self.device)
 
             imgs_encoding.append(sub_img_enc)
 
@@ -114,7 +119,12 @@ class YoloClip:
 
         # 2.2 Use CLIP to encode the text prompt
 
-        tk_prompt = clip.tokenize(prompt)
+
+        if not self.quiet:
+            print("[INFO] Running CLIP on the prompt...")
+
+        tk_prompt = clip.tokenize(prompt).to(self.device)
+
 
         with torch.no_grad():
             text_encoding = self.clip_model.encode_text(tk_prompt)
@@ -130,7 +140,8 @@ class YoloClip:
         c_sims = cosine_similarity(text_encoding, imgs_encoding).squeeze()
 
         # Euclidean distance
-        e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
+        e_dists = torch.cdist(text_encoding.double(), imgs_encoding.double(), p=2).squeeze() # error of torch cdist
+        e_dists = e_dists.float()
 
         pred_bbox_idx["dotproduct"] = int(d_sims.argmax())
         pred_bbox_idx["cosine"] = int(c_sims.argmax())
@@ -141,12 +152,15 @@ class YoloClip:
 
         # 3.2 Save predicted bbox and true bbox
 
-        pred_bbox = yolo_results.iloc[best_idx, 0:4].tolist()
+        pred_bbox = yolo_results[best_idx, 0:4].tolist()
 
         gt_bbox = img_sample.bbox
 
         # 4.1 Compute other metrics: Intersection over Union (IoU)
 
+        # TODO
+        # UserWarning: Creating a tensor from a list of numpy.ndarrays is extremely slow. Please consider converting the list to a single numpy.ndarray with numpy.array() before converting to a tensor. (Triggered internally at ../torch/csrc/utils/tensor_new.cpp:245.)
+        #   torch.tensor([gt_bbox])
         iou = box_iou(
             torch.tensor([pred_bbox]),
             torch.tensor([gt_bbox])
@@ -169,7 +183,7 @@ class YoloClip:
             cur_categ_enc = self.categories[category_id]['encoding']
             all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
             all_c_sims[cur_categ] = cosine_similarity(pred_img_enc, cur_categ_enc)  # torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
-            all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc).squeeze()
+            all_e_dists[cur_categ] = torch.cdist(pred_img_enc.double(), cur_categ_enc.double()).squeeze().float()
 
         pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
         pred_bbox_categ["cosine"] = max(all_c_sims, key=all_c_sims.get)
