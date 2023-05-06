@@ -467,7 +467,7 @@ def visual_grounding_test(vg_pipeline, dataset):
 
 cases = ("fine_tune_clip", "contrastive_learning", "test_base_clip", "test_ft_clip", "test_contrastive_clip")
 
-case = "test_ft_clip"
+case = "test_contrastive_clip"
 match case:
     case "fine_tune_clip":  # fine-tuned clip
 
@@ -527,6 +527,26 @@ match case:
         scores = visual_grounding_test(yoloclip, test_ds)
 
         fp = os.path.join(save_path, 'results_fine_clip_yolov8x.json')
+        with open(fp, 'w') as f:
+            json.dump(scores, f)
+        print("results saved as: " + fp)
+
+    case "test_contrastive_clip":
+        load_path = "saved_models"
+        save_path = "results"
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        fp = os.path.join(load_path, "contrastive_loss_clip.pickle")
+        with open(fp, 'rb') as f:
+            clip_model = pickle.load(f)
+
+        from modules.yoloclip import YoloClip
+
+        yoloclip = YoloClip(device=device, categories=dataset.dataset.categories)
+        yoloclip.clip_model = clip_model
+        scores = visual_grounding_test(yoloclip, test_ds)
+
+        fp = os.path.join(save_path, 'results_contrastive_clip_yolov8x.json')
         with open(fp, 'w') as f:
             json.dump(scores, f)
         print("results saved as: " + fp)
