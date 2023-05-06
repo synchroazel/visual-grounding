@@ -4,6 +4,7 @@ import torch
 from torchvision.ops import box_iou
 from ultralytics import YOLO
 
+
 def display_preds(img, prompt, pred_bbox, gt_bbox, model_name):
     fig, ax = plt.subplots()
     ax.imshow(img)
@@ -84,13 +85,11 @@ class YoloClip:
 
         img = img_sample.img
 
-
         if not self.quiet:
             print("[INFO] Running YOLO on the image...")
 
         yolo_results = self.yolo_model(img_sample.path)[0]
         yolo_results = yolo_results.boxes.xyxy
-
 
         if not self.quiet:
             print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
@@ -119,12 +118,10 @@ class YoloClip:
 
         # 2.2 Use CLIP to encode the text prompt
 
-
         if not self.quiet:
             print("[INFO] Running CLIP on the prompt...")
 
         tk_prompt = clip.tokenize(prompt).to(self.device)
-
 
         with torch.no_grad():
             text_encoding = self.clip_model.encode_text(tk_prompt)
@@ -140,7 +137,7 @@ class YoloClip:
         c_sims = cosine_similarity(text_encoding, imgs_encoding).squeeze()
 
         # Euclidean distance
-        e_dists = torch.cdist(text_encoding.double(), imgs_encoding.double(), p=2).squeeze() # error of torch cdist
+        e_dists = torch.cdist(text_encoding.double(), imgs_encoding.double(), p=2).squeeze()  # error of torch cdist
         e_dists = e_dists.float()
 
         pred_bbox_idx["dotproduct"] = int(d_sims.argmax())
@@ -172,7 +169,7 @@ class YoloClip:
         pred_img = self.clip_prep(pred_img).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            pred_img_enc = self.clip_model.encode_image(pred_img)
+            pred_img_enc = self.clip_model.encode_image(pred_img).float()
 
         pred_bbox_categ = dict()
 
@@ -180,9 +177,10 @@ class YoloClip:
 
         for category_id in self.categories.keys():
             cur_categ = self.categories[category_id]['category']
-            cur_categ_enc = self.categories[category_id]['encoding']
+            cur_categ_enc = self.categories[category_id]['encoding'].float()
             all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
-            all_c_sims[cur_categ] = cosine_similarity(pred_img_enc, cur_categ_enc)  # torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
+            all_c_sims[cur_categ] = cosine_similarity(pred_img_enc,
+                                                      cur_categ_enc)  # torch.nn.functional.cosine_similarity(pred_img_enc, cur_categ_enc, dim=1).squeeze()
             all_e_dists[cur_categ] = torch.cdist(pred_img_enc.double(), cur_categ_enc.double()).squeeze().float()
 
         pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
