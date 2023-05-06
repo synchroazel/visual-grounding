@@ -5,3 +5,5 @@ runs/
 **/.ipynb_checkpoints/
 *.pt
 yolov5/
+*.pickle
+*.json
