@@ -22,7 +22,7 @@ else:
 
 # HYPERPARAMETERS
 
-batch_size = 128  # 256 causes out of memory with 24GB of GPU ram
+batch_size = 64 # 128  # 256 causes out of memory with 24GB of GPU ram
 learning_rate = 0.001
 momentum = 0.9
 epochs = 3
@@ -300,7 +300,6 @@ def training_step_cl(net, data_loader, optimizer, cost_function, device=device):
 
         # forward pass
         image_logits, text_logits = net(images, texts)
-        # logits are nan
 
         # loss computation
         loss = contrastive_loss(image_logits, text_logits, cost_function)
@@ -467,7 +466,7 @@ def visual_grounding_test(vg_pipeline, dataset):
 
 cases = ("fine_tune_clip", "contrastive_learning", "test_base_clip", "test_ft_clip", "test_contrastive_clip")
 
-case = "test_contrastive_clip"
+case = "contrastive_learning"
 match case:
     case "fine_tune_clip":  # fine-tuned clip
 
