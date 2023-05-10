@@ -263,6 +263,8 @@ def training_loop_ft(train_ds,
 
 # -----------------------------------------------------------------------------------------------------------------
 
+
+
 # -----------------------------------------------------------------------------------------------------------------
 def contrastive_loss(image_logits, text_logits, cost_function):
     labels = np.arange(image_logits.shape[0])
@@ -275,6 +277,7 @@ def contrastive_loss(image_logits, text_logits, cost_function):
 
 
 def training_step_cl(net, data_loader, optimizer, cost_function, device=device):
+
     n_samples = 0.0
     cumulative_loss = 0.0
 
