@@ -8,21 +8,24 @@ from PIL import Image
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+
 from modules.clip_classes import CustomCLIP
 from modules.refcocog import RefCOCOg, RefCOCOgSample
 from modules.utilities import *
 
 if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-    torch.cuda.empty_cache()
-    print("[INFO] GPU found, using GPU.")
+    device = torch.device("cuda")  # CUDA GPU
+    print("[INFO] Using GPU.")
+elif torch.has_mps:
+    device = torch.device("mps")  # Apple Silicon GPU
+    print("[INFO] Using MPS.")
 else:
     device = torch.device("cpu")
     print("[INFO] No GPU found, using CPU instead.")
 
 # HYPERPARAMETERS
 
-batch_size = 64 # 128  # 256 causes out of memory with 24GB of GPU ram
+batch_size = 64  # 128  # 256 causes out of memory with 24GB of GPU ram
 learning_rate = 0.001
 momentum = 0.9
 epochs = 3
@@ -36,8 +39,8 @@ print("[INFO] Input resolution: ", clip_model.visual.input_resolution)
 print("[INFO] Max prompt length:", clip_model.context_length)
 print("[INFO] Vocab size:", clip_model.vocab_size)
 
-# modify
 dataset_path = "/media/dmmp/vid+backup/Data/refcocog"
+# data_path = "../dataset/refcocog"
 
 dataset = RefCOCOg(ds_path=dataset_path)
 
@@ -58,7 +61,7 @@ print(f"Val size:   {len(val_ds)}")
 print(f"Test size:  {len(test_ds)}")
 
 
-# -----------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 def get_data(dataset):
     texts, images = list(), list()
 
@@ -261,11 +264,7 @@ def training_loop_ft(train_ds,
     return net
 
 
-# -----------------------------------------------------------------------------------------------------------------
-
-
-
-# -----------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 def contrastive_loss(image_logits, text_logits, cost_function):
     labels = np.arange(image_logits.shape[0])
     labels = torch.from_numpy(labels).to(device)
@@ -277,7 +276,6 @@ def contrastive_loss(image_logits, text_logits, cost_function):
 
 
 def training_step_cl(net, data_loader, optimizer, cost_function, device=device):
-
     n_samples = 0.0
     cumulative_loss = 0.0
 
@@ -442,7 +440,7 @@ def training_loop_cl(train_ds,
     return net
 
 
-# -----------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 
 def visual_grounding_test(vg_pipeline, dataset):
     scores = list()
@@ -519,7 +517,7 @@ match case:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         fp = os.path.join(load_path, "fine_tuned_clip.pickle")
-        with open(fp,'rb' ) as f:
+        with open(fp, 'rb') as f:
             clip_model = pickle.load(f)
 
         from modules.yoloclip import YoloClip
