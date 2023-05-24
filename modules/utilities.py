@@ -43,11 +43,11 @@ def display_preds(img, prompt, pred_bbox, gt_bbox, model_name):
     )
 
     ax.add_patch(pred_rect)
-    ax.text(pred_bbox[0], pred_bbox[1], "predicted", color=(1, 1, 1),
+    ax.text(pred_bbox[0], pred_bbox[1], "predicted",
             bbox={"facecolor": (0, 1, 0), "pad": 2, "color": (0, 1, 0)})
 
     ax.add_patch(gt_rect)
-    ax.text(gt_bbox[0], gt_bbox[3], "true", color=(1, 1, 1),
+    ax.text(gt_bbox[0], gt_bbox[3], "true",
             bbox={"facecolor": (1, 0, 0), "pad": 2, "color": (1, 0, 0)})
 
     ax.axis("off")

@@ -1,6 +1,7 @@
 .idea/
 dataset/*
 runs/
+*log*
 **/__pycache__/
 **/.ipynb_checkpoints/
 *.pt
