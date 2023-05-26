@@ -131,7 +131,7 @@ class ClipSeg:
         pred_bbox = find_best_bbox(dfp_heatmap, lower_bound=-0.75)
 
         if pred_bbox is None:
-            return {"IoU": 0, "cosine": 0, "euclidean": 0}
+            return {"IoU": 0, "cosine": np.nan, "euclidean": np.nan, "dotproduct": np.nan, "grounding": np.nan}
 
         if self.d > 1:
             pred_bbox = [pred_bbox[0] * self.d + self.d // 2,
@@ -147,8 +147,8 @@ class ClipSeg:
 
         # Compute IoU
         iou = box_iou(
-            torch.tensor(np.array(pred_bbox)),
-            torch.tensor(np.array(gt_bbox))
+            torch.tensor(pred_bbox).unsqueeze(0),
+            torch.tensor(gt_bbox).unsqueeze(0)
         ).item()
 
         # Compute distance metrics

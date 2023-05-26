@@ -1,9 +1,10 @@
+import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
-import datetime
 
 from modules.refcocog import RefCOCOgSample
 
@@ -160,14 +161,14 @@ def visual_grounding_test(vg_pipeline, dataset, logging=False):
             # The bar description is live updated with the average score for each metric
 
             for metric in scores[0].keys():
-                avg_metric = np.mean([score[metric] for score in scores])
+                avg_metric = np.mean([score[metric] for score in scores if score[metric] is not None])
                 avg_metric = f"{metric}: {avg_metric:.3f}"
                 avg_metrics.append(avg_metric)
 
             pbar_desc = " | ".join(avg_metrics)
 
             if logging:
-                pipeline_name = clipslic.__class__.__name__.lower()
+                pipeline_name = vg_pipeline.__class__.__name__.lower()
                 datetime_tag = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
 
                 with open(f"{pipeline_name}_log_{datetime_tag}.txt", "a") as f:
