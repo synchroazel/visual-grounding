@@ -44,4 +44,4 @@ print(f"[INFO] Starting testing")
 
 clipslic = ClipSeg(dataset.categories, method="w", n_segments=(4, 8, 16, 32), q=0.75, quiet=True)
 
-visual_grounding_test(clipslic, red_test_ds, logging=True)
+visual_grounding_test(clipslic, test_ds, logging=True)

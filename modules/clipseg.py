@@ -147,8 +147,8 @@ class ClipSeg:
 
         # Compute IoU
         iou = box_iou(
-            torch.tensor([pred_bbox]),
-            torch.tensor([gt_bbox])
+            torch.tensor(np.array(pred_bbox)),
+            torch.tensor(np.array(gt_bbox))
         ).item()
 
         # Compute distance metrics
