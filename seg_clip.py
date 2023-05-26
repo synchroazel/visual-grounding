@@ -7,9 +7,7 @@ from modules.clipseg import ClipSeg
 from modules.refcocog import RefCOCOg
 from modules.utilities import visual_grounding_test
 
-
 DATA_PATH = "dataset/refcocog"  # path to the dataset
-
 
 if torch.cuda.is_available():
     device = torch.device("cuda")  # CUDA GPU
@@ -44,6 +42,6 @@ print(f"[INFO] test split:   {len(test_ds)}")
 
 print(f"[INFO] Starting testing")
 
-clipslic = ClipSeg(method="w", n_segments=(4, 8, 16, 32), q=0.75, quiet=True)
+clipslic = ClipSeg(dataset.categories, method="w", n_segments=(4, 8, 16, 32), q=0.75, quiet=True)
 
 visual_grounding_test(clipslic, red_test_ds, logging=True)
