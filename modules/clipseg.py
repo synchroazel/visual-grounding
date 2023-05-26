@@ -4,7 +4,6 @@ import clip
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import spacy
 import torch
 from skimage import io
 from skimage.color import rgb2gray
@@ -20,7 +19,7 @@ from modules.utilities import cosine_similarity, display_preds, find_best_bbox, 
 
 class ClipSeg:
 
-    def __init__(self, categories, method, n_segments=None, q=0.95, d=16, device=device, quiet=False):
+    def __init__(self, categories, method, n_segments=None, q=0.95, d=16, device="cpu", quiet=False):
 
         self.categories = categories
         self.method = method
@@ -51,19 +50,6 @@ class ClipSeg:
 
         with torch.no_grad():
             return self.clip_model.encode_image(image_)
-
-    def _parse_prompt(self, sentence):
-        nlp = spacy.load("en_core_web_sm")
-        sent_ = nlp(sentence)
-
-        out_sents = list()
-
-        for chunk in sent_.noun_chunks:
-
-            if chunk.root.dep_ != "prep":
-                out_sents.append(chunk.text)
-
-        return out_sents
 
     def _compute_hmap(self, img_sample, np_image, prompt, method, masks):
 
