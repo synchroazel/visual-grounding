@@ -20,12 +20,11 @@ class YoloClip:
                  device="cpu",
                  quiet=True):
 
+        self.categories = categories
         self.yolo_model = YOLO(yolo_ver + ".pt")
         self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
-        self.quiet = quiet
         self.device = device
-        self.categories = categories
-        # self.dist_metric = dist_metric
+        self.quiet = quiet
 
         for category_id in categories.keys():
             cur_category = categories[category_id]['category']
@@ -40,13 +39,21 @@ class YoloClip:
         if yolo_ver not in valid_yolo_versions:
             raise ValueError(f"Invalid YOLO version '{yolo_ver}'. Must be one of {valid_yolo_versions}.")
 
-        # valid_metrics = ["euclidean", "cosine", "dotproduct"]
-        # if dist_metric not in valid_metrics:
-        #     raise ValueError(f"Invalid metric '{dist_metric}'. Must be one of {valid_metrics}.")
+    def _encode_text(self, text):
+        text_ = clip.tokenize(text).to(self.device)
+
+        with torch.no_grad():
+            return self.clip_model.encode_text(text_)
+
+    def _encode_img(self, image):
+        image_ = self.clip_prep(image).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            return self.clip_model.encode_image(image_)
 
     def __call__(self, img_sample, prompt, show=True):
 
-        # 1. Use YOLO to find relevant objects
+        # Use YOLO to find relevant objects
 
         img = img_sample.img
 
@@ -56,12 +63,10 @@ class YoloClip:
         if not self.quiet:
             print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
 
-        # TODO: In case YOLO doesn't find any object, what should we do?
-
         if yolo_results.shape[0] == 0:
             raise ValueError("YOLO didn't find any object in the image!")
 
-        # 2.1 Use CLIP to encode each relevant object image
+        # Use CLIP to encode each relevant object image
 
         imgs_encoding = list()
 
@@ -80,30 +85,21 @@ class YoloClip:
 
         # 2.2 Use CLIP to encode the text prompt
 
-        tk_prompt = clip.tokenize(prompt)
-
-        with torch.no_grad():
-            text_encoding = self.clip_model.encode_text(tk_prompt)
+        text_encoding = self._encode_text(prompt)
 
         # 3.1 Compute distance metrics and find the best object according to one of them
 
         # pred_bbox_idx = dict()
 
         # # Dot product similarity
-        # d_sims = torch.mm(text_encoding, imgs_encoding.t()).squeeze()
+        d_sims = torch.mm(text_encoding, imgs_encoding.t()).squeeze()
 
         # Cosine similarity
         c_sims = cosine_similarity(text_encoding, imgs_encoding).squeeze()
 
         # # Euclidean distance
-        # e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
+        e_dists = torch.cdist(text_encoding, imgs_encoding, p=2).squeeze()
 
-        # pred_bbox_idx["dotproduct"] = int(d_sims.argmax())
-        # pred_bbox_idx["cosine"] = int(c_sims.argmax())
-        # pred_bbox_idx["euclidean"] = int(e_dists.argmin())
-
-        # index of the best bounding box according to user-chosen metric
-        # best_idx = pred_bbox_idx[self.dist_metric]
         best_idx = int(c_sims.argmax())
 
         # 3.2 Save predicted bbox and true bbox
@@ -112,14 +108,14 @@ class YoloClip:
 
         gt_bbox = img_sample.bbox
 
-        # 4.1 Compute other metrics: Intersection over Union (IoU)
+        # Compute other metrics: Intersection over Union (IoU)
 
         iou = box_iou(
             torch.tensor(np.array(pred_bbox)),
             torch.tensor(np.array(gt_bbox))
         )
 
-        # 4.2 Compute other metrics: visual grounding accuracy
+        # Compute other metrics: visual grounding accuracy
 
         pred_img = img.crop(pred_bbox)
         pred_img = self.clip_prep(pred_img).unsqueeze(0).to(self.device)
@@ -134,16 +130,7 @@ class YoloClip:
         for category_id in self.categories.keys():
             cur_categ = self.categories[category_id]['category']
             cur_categ_enc = self.categories[category_id]['encoding'].float()
-            # all_d_sims[cur_categ] = torch.mm(pred_img_enc, cur_categ_enc.t()).squeeze()
             all_c_sims[cur_categ] = cosine_similarity(pred_img_enc, cur_categ_enc)
-            # all_e_dists[cur_categ] = torch.cdist(pred_img_enc, cur_categ_enc).squeeze()
-
-        # pred_bbox_categ["dotproduct"] = max(all_d_sims, key=all_d_sims.get)
-        # pred_bbox_categ["cosine"] = max(all_c_sims, key=all_c_sims.get)
-        # pred_bbox_categ["euclidean"] = min(all_e_dists, key=all_e_dists.get)
-        #
-        # # category of the best bounding box according to chosen metric
-        # pred_category = pred_bbox_categ["cosine"]
 
         pred_category = max(all_c_sims, key=all_c_sims.get)
 
@@ -161,9 +148,9 @@ class YoloClip:
             display_preds(img, prompt, pred_bbox, gt_bbox, model_name="YOLO+CLIP")
 
         return {
-            "cosine": float(c_sims.max()),
-            # "euclidean": float(e_dists.min()),
-            # "dotproduct": float(d_sims.max()),
             "IoU": float(iou),
-            "recall": float(grd_correct)
+            "cosine": float(c_sims.max()),
+            "euclidean": float(e_dists.min()),
+            "dotproduct": float(d_sims.max()),
+            "grounding": float(grd_correct)
         }
