@@ -41,7 +41,7 @@ def main(args):
     dataset = RefCOCOg(ds_path=args.datapath)
     test_ds = RefCOCOg(ds_path=args.datapath, split='test')
 
-    if args.reduce_dataset is not None:
+    if args.red_dataset is not None:
         print(f"[INFO] Reducing dataset to {args.reduce_dataset * 100}% of its original size.")
         keep = args.reduce_dataset
         red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-p', '--pipeline', type=str,
                         help='Pipeline to test (yoloclip or segclip).')
-    parser.add_argument('-dp', '--datapath', type=str,
+    parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
                         help='path to the dataset.')
     parser.add_argument('-lg', '--logging', action='store_true',
                         help='Whether to log the results or not.')

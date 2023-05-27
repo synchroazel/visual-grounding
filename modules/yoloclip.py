@@ -79,7 +79,7 @@ class YoloClip:
         images_encs = list()
 
         for i in range(yolo_results.shape[0]):
-            bbox = yolo_results[i, 0:4].numpy()
+            bbox = yolo_results[i, 0:4].cpu().numpy()
 
             sub_img = img.crop(bbox)
 
