@@ -1,16 +1,21 @@
 """Testing script for the visual grounding pipeline based on segmentation and CLIP."""
 
+import argparse
+
 import torch
 from torch.utils.data import random_split
 
-from modules.yoloclip import YoloClip
 from modules.clipseg import ClipSeg
 from modules.refcocog import RefCOCOg
 from modules.utilities import visual_grounding_test
+from modules.yoloclip import YoloClip
 
-import argparse
+hp_presets = {
+    "yoloclip": {'yolo_ver': 'yolov8x'},
+    "clipseg": {'method': "w", 'n_segments': (4, 8, 16, 32), 'q': 0.75}
+}
 
-DATA_PATH = "dataset/refcocog"  # path to the dataset
+supported_pipelines = ["yoloclip", "clipseg"]
 
 
 def get_best_device():
@@ -28,53 +33,65 @@ def get_best_device():
 
 
 def main(args):
+    if args.pipeline not in supported_pipelines:
+        raise ValueError(f"Pipeline `{args.pipeline}` not supported. Supported pipelines are: {supported_pipelines}.")
+
     device = get_best_device()
 
-    dataset = RefCOCOg(ds_path=DATA_PATH)
+    dataset = RefCOCOg(ds_path=args.datapath)
+    test_ds = RefCOCOg(ds_path=args.datapath, split='test')
 
-    train_ds = RefCOCOg(ds_path=DATA_PATH, split='train')
-    val_ds = RefCOCOg(ds_path=DATA_PATH, split='val')
-    test_ds = RefCOCOg(ds_path=DATA_PATH, split='test')
+    if args.reduce_dataset is not None:
+        print(f"[INFO] Reducing dataset to {args.reduce_dataset * 100}% of its original size.")
+        keep = args.reduce_dataset
+        red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
+        red_test_ds, _ = random_split(test_ds, [int(keep * len(test_ds)), len(test_ds) - int(keep * len(test_ds))])
+        print(f"[INFO] Dataset Size (reduced): {len(red_dataset)}")
+        print(f"[INFO] test split (reduced):   {len(red_test_ds)}")
 
-    keep = 0.1
-    red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
-    red_train_ds, _ = random_split(train_ds, [int(keep * len(train_ds)), len(train_ds) - int(keep * len(train_ds))])
-    red_val_ds, _ = random_split(val_ds, [int(keep * len(val_ds)), len(val_ds) - int(keep * len(val_ds))])
-    red_test_ds, _ = random_split(test_ds, [int(keep * len(test_ds)), len(test_ds) - int(keep * len(test_ds))])
+    else:
+        print(f"[INFO] Dataset Size: {len(dataset)}")
+        print(f"[INFO] test split:   {len(test_ds)}")
 
-    print(f"[INFO] Dataset Size: {len(dataset)}")
-    print(f"[INFO] train split:  {len(train_ds)}")
-    print(f"[INFO] val split:    {len(val_ds)}")
-    print(f"[INFO] test split:   {len(test_ds)}")
+    if args.pipeline == "yoloclip":
+
+        if args.use_preset:
+            pipeline = YoloClip(dataset.categories, **hp_presets["yoloclip"], quiet=True, device=device)
+
+    if args.pipeline == "clipseg":
+
+        if args.use_preset:
+            pipeline = ClipSeg(dataset.categories, **hp_presets["clipseg"], quiet=True, device=device)
 
     print(f"[INFO] Starting testing\n")
 
-    yoloclip = YoloClip(dataset.categories, yolo_ver="yolov8x",
-                        quiet=True, device=device)
-
-    clipslic = ClipSeg(dataset.categories, method="w", n_segments=(4, 8, 16, 32), q=0.75,
-                       quiet=True, device=device)
-
-    visual_grounding_test(clipslic, test_ds, logging=True)
+    visual_grounding_test(pipeline, test_ds, logging=args.logging)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Test the visual grounding pipeline.')
+    parser = argparse.ArgumentParser(description='Test the visual grounding pipeline.',
+                                     formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=50))
 
     parser.add_argument('-p', '--pipeline', type=str,
                         help='Pipeline to test (yoloclip or segclip).')
-    parser.add_argument('-d', '--datapath', type=str,
+    parser.add_argument('-dp', '--datapath', type=str,
                         help='path to the dataset.')
-    parser.add_argument('-v', '--yolo_version', type=str,
+    parser.add_argument('-lg', '--logging', action='store_true',
+                        help='Whether to log the results or not.')
+    parser.add_argument('-rd', '--red_dataset', type=float, default=None,
+                        help='Whether to use a reduced version of the dataset or not')
+    parser.add_argument('-up', '--use_preset', action='store_true',
+                        help='Whether to use a preset of hyperparameters for the chosen pipeline or not.')
+    parser.add_argument('-yv', '--yolo_version', type=str,
                         help='Yolo version to use (yolov5x, yolov8x). [only for yoloclip]')
-    parser.add_argument('-s', '--seg_method', type=str,
+    parser.add_argument('-sm', '--seg_method', type=str,
                         help='Method to use for segmentation (`s`for SLIC or `w` for Watershed) [only for segclip].')
-    parser.add_argument('-n', '--n_segments', type=int,
+    parser.add_argument('-ns', '--n_segments', type=int,
                         help='Number of segments to use for segmentation [only for segclip].')
-    parser.add_argument('-q', '--q', type=float,
+    parser.add_argument('-ts', '--threshold', type=float,
                         help='Threshold for filtering CLIP heatmap [only for segclip].')
-    parser.add_argument('-d', '--test_size', type=int,
-                        help='Heatmap downsampling factor [only for segclip].')
+    parser.add_argument('-ds', '--downsampling', type=int,
+                        help='Heatmap downsampling factor [only for clipseg].')
 
     args = parser.parse_args()
 

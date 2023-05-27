@@ -19,7 +19,14 @@ from modules.utilities import cosine_similarity, display_preds, find_best_bbox, 
 
 class ClipSeg:
 
-    def __init__(self, categories, method, n_segments=None, q=0.95, d=16, device="cpu", quiet=False):
+    def __init__(self,
+                 categories,
+                 method,
+                 n_segments=None,
+                 q=0.95,
+                 d=16,
+                 device="cpu",
+                 quiet=False):
 
         self.categories = categories
         self.method = method
@@ -30,14 +37,20 @@ class ClipSeg:
         self.device = device
         self.quiet = quiet
 
-        if self.method not in ("s", "w"):
-            raise ValueError(f"Method `{method}` not supported. Supported methods are: `s`(slic), `w`(watershed).")
+        valid_methods = ["s", "w"]
+        if self.method not in valid_methods:
+            raise ValueError(f"Method `{method}` not supported. Supported methods are: {valid_methods}.")
 
         for category_id in categories.keys():
             cur_category = categories[category_id]['category']
             with torch.no_grad():
                 cur_category_enc = self._encode_text(f"a photo of {cur_category}")
             categories[category_id].update({"encoding": cur_category_enc})
+
+        print(f"[INFO] Segmentation method: {method}")
+        print(f"[INFO] Number of segments: {n_segments}")
+        print(f"[INFO] Threshold q.tile for filtering: {q}")
+        print(f"[INFO] Downsampling factor: {d}")
 
     def _encode_text(self, text):
         text_ = clip.tokenize(text).to(self.device)

@@ -171,8 +171,8 @@ def visual_grounding_test(vg_pipeline, dataset, logging=False):
                 pipeline_name = vg_pipeline.__class__.__name__.lower()
                 datetime_tag = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
 
-                with open(f"{pipeline_name}_log_{datetime_tag}.txt", "a") as f:
-                    f.write("[" + datetime_tag + "]" + pbar_desc + "\n")
+                with open(f"logs/{pipeline_name}_log_{datetime_tag}.txt", "a") as f:
+                    f.write("[" + datetime_tag + "] " + pbar_desc + "\n")
 
             pbar.set_description(pbar_desc)
 
