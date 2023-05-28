@@ -166,11 +166,11 @@ class ClipSeg:
 
         # Compute distance metrics
         pred_img = img_sample.img.crop(gt_bbox)
-        pred_image_enc = self._encode_img(pred_img)
-        prompt_enc = self._encode_text(prompt)
+        pred_image_enc = self._encode_img(pred_img).float()
+        prompt_enc = self._encode_text(prompt).float()
 
         cosine_sim = cosine_similarity(prompt_enc, pred_image_enc)
-        euclidean_dist = torch.cdist(prompt_enc.float(), pred_image_enc.float(), p=2).squeeze()
+        euclidean_dist = torch.cdist(prompt_enc, pred_image_enc, p=2).squeeze()
         dotproduct = prompt_enc @ pred_image_enc.T
 
         # Compute grounding accuracy
