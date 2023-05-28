@@ -18,10 +18,50 @@ OPTIMIZERS_TO_TRY = {
 }
 
 
-# tensorboard logging utilities
-def log_values(writer, step, loss, accuracy, prefix):
+def get_best_device():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")  # CUDA GPU
+        print("[INFO] Using cuda.")
+    elif torch.has_mps:
+        device = torch.device("mps")  # Apple Silicon GPU
+        print("[INFO] Using MPS.")
+    else:
+        device = torch.device("cpu")
+        print("[INFO] No GPU found, using CPU instead.")
+
+    return device
+
+
+def get_data(dataset):
+    texts, images = list(), list()
+
+    for sample in tqdm(dataset, desc="[INFO] Loading images and captions"):
+        sample = RefCOCOgSample(**sample)
+
+        for sentence in sample.sentences:
+            images.append(sample.path)
+            texts.append(sentence)
+
+    return images, texts
+
+
+def get_optimizer(layer, lr, wd, momentum, optimizer):
+    try:
+        optimizer = OPTIMIZERS_TO_TRY[optimizer]([
+            {'params': layer.parameters(), 'lr': lr}
+        ], lr=lr, weight_decay=wd, momentum=momentum)
+    except TypeError:
+        optimizer = OPTIMIZERS_TO_TRY[optimizer]([
+            {'params': layer.parameters(), 'lr': lr}
+        ], lr=lr, weight_decay=wd)
+
+    return optimizer
+
+
+def log_values(writer, step, prefix, loss, accuracy=None):
     writer.add_scalar(f"{prefix}/loss", loss, step)
-    writer.add_scalar(f"{prefix}/accuracy", accuracy, step)
+    if accuracy is not None:
+        writer.add_scalar(f"{prefix}/accuracy", accuracy, step)
 
 
 def cosine_similarity(images_z: torch.Tensor, texts_z: torch.Tensor):
@@ -161,7 +201,7 @@ def visual_grounding_test(vg_pipeline, dataset, logging=False):
             # The bar description is live updated with the average score for each metric
 
             for metric in scores[0].keys():
-                avg_metric = np.mean([score[metric] for score in scores if score[metric] is not None])
+                avg_metric = np.mean([score[metric] for score in scores if score[metric] is not np.nan])
                 avg_metric = f"{metric}: {avg_metric:.3f}"
                 avg_metrics.append(avg_metric)
 
@@ -177,6 +217,8 @@ def visual_grounding_test(vg_pipeline, dataset, logging=False):
             pbar.set_description(pbar_desc)
 
     for metric in scores[0].keys():
-        avg_metric = np.mean([score[metric] for score in scores])
+        avg_metric = np.mean([score[metric] for score in scores if score[metric] is not np.nan])
 
         print("Avg. {}: {:.3f}".format(metric, avg_metric))
+
+    return scores

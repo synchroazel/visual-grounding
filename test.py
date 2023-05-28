@@ -2,12 +2,11 @@
 
 import argparse
 
-import torch
 from torch.utils.data import random_split
 
 from modules.clipseg import ClipSeg
 from modules.refcocog import RefCOCOg
-from modules.utilities import visual_grounding_test
+from modules.utilities import visual_grounding_test, get_best_device
 from modules.yoloclip import YoloClip
 
 hp_presets = {
@@ -16,20 +15,6 @@ hp_presets = {
 }
 
 supported_pipelines = ["yoloclip", "clipseg"]
-
-
-def get_best_device():
-    if torch.cuda.is_available():
-        device = torch.device("cuda")  # CUDA GPU
-        print("[INFO] Using cuda.")
-    elif torch.has_mps:
-        device = torch.device("mps")  # Apple Silicon GPU
-        print("[INFO] Using MPS.")
-    else:
-        device = torch.device("cpu")
-        print("[INFO] No GPU found, using CPU instead.")
-
-    return device
 
 
 def main(args):
@@ -44,14 +29,11 @@ def main(args):
     if args.red_dataset is not None:
         print(f"[INFO] Reducing dataset to {args.reduce_dataset * 100}% of its original size.")
         keep = args.reduce_dataset
-        red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
-        red_test_ds, _ = random_split(test_ds, [int(keep * len(test_ds)), len(test_ds) - int(keep * len(test_ds))])
-        print(f"[INFO] Dataset Size (reduced): {len(red_dataset)}")
-        print(f"[INFO] test split (reduced):   {len(red_test_ds)}")
+        dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
+        test_ds, _ = random_split(test_ds, [int(keep * len(test_ds)), len(test_ds) - int(keep * len(test_ds))])
 
-    else:
-        print(f"[INFO] Dataset Size: {len(dataset)}")
-        print(f"[INFO] test split:   {len(test_ds)}")
+    print(f"[INFO] Dataset Size: {len(dataset)}")
+    print(f"[INFO] test split:   {len(test_ds)}")
 
     if args.pipeline == "yoloclip":
 
