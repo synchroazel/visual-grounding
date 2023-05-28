@@ -2,6 +2,7 @@ import time
 
 import clip
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torchvision.ops import box_iou
 from ultralytics import YOLO
@@ -19,7 +20,8 @@ class YoloClip:
                  quiet=False):
 
         self.categories = categories
-        self.yolo_model = YOLO(yolo_ver + ".pt")
+        self.yolo_ver = yolo_ver
+        self.yolo_model = YOLO(self.yolo_ver + ".pt")
         self.clip_model, self.clip_prep = clip.load(clip_ver, device="cpu")
         self.device = device
         self.quiet = quiet
@@ -72,7 +74,8 @@ class YoloClip:
             print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
 
         if yolo_results.shape[0] == 0:
-            raise ValueError("YOLO didn't find any object in the image!")
+            print(f"[WARN] YOLO ({self.yolo_ver}) couldn't find any object in {img_sample.path}!")
+            return {"IoU": 0, "cosine": np.nan, "euclidean": np.nan, "dotproduct": np.nan, "grounding": np.nan}
 
         # Use CLIP to encode each relevant object image
 

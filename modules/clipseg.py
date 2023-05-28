@@ -170,7 +170,7 @@ class ClipSeg:
         prompt_enc = self._encode_text(prompt)
 
         cosine_sim = cosine_similarity(prompt_enc, pred_image_enc)
-        euclidean_dist = torch.cdist(prompt_enc, pred_image_enc, p=2).squeeze()
+        euclidean_dist = torch.cdist(prompt_enc.float(), pred_image_enc.float(), p=2).squeeze()
         dotproduct = prompt_enc @ pred_image_enc.T
 
         # Compute grounding accuracy
