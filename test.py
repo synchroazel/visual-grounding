@@ -58,10 +58,24 @@ def main(args):
         if args.use_preset:
             pipeline = YoloClip(dataset.categories, **hp_presets["yoloclip"], quiet=True, device=device)
 
+        else:
+            pipeline = YoloClip(dataset.categories,
+                                yolo_ver=args.yolo_version,
+                                quiet=True,
+                                device=device)
+
     if args.pipeline == "clipseg":
 
         if args.use_preset:
             pipeline = ClipSeg(dataset.categories, **hp_presets["clipseg"], quiet=True, device=device)
+
+        else:
+            pipeline = ClipSeg(dataset.categories,
+                               method=args.seg_method,
+                               n_segments=args.n_segments,
+                               q=args.threshold,
+                               quiet=True,
+                               device=device)
 
     print(f"[INFO] Starting testing\n")
 
