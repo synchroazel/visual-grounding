@@ -321,8 +321,8 @@ def training_loop(model,
 
     # For each epoch, train the network and then compute evaluation results
     for e in range(epochs):
-        train_loss, train_accuracy = training_step_fun(net, train_loader, optimizer, cost_function)
-        val_loss, val_accuracy = test_step_fun(net, val_loader, cost_function)
+        train_loss, train_accuracy = training_step_fun(net, clip_prep_, train_loader, optimizer, cost_function, device)
+        val_loss, val_accuracy = test_step_fun(net, clip_prep_, val_loader, cost_function, device)
 
         # Logs to TensorBoard
         log_values(writer, e, "validation", val_loss, val_accuracy)
@@ -368,7 +368,7 @@ def main(args):
 
     if args.red_dataset is not None:
         print(f"[INFO] Reducing dataset to {args.reduce_dataset * 100}% of its original size.")
-        keep = args.reduce_dataset
+        keep = args.red_dataset
         dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
         train_ds, _ = random_split(train_ds, [int(keep * len(train_ds)), len(train_ds) - int(keep * len(train_ds))])
         val_ds, _ = random_split(val_ds, [int(keep * len(val_ds)), len(val_ds) - int(keep * len(val_ds))])
@@ -434,11 +434,9 @@ if __name__ == '__main__':
                         help='path to the dataset.')
     parser.add_argument('-rd', '--red_dataset', type=float, default=None,
                         help='Whether to use a reduced version of the dataset or not')
-    parser.add_argument('-rdp', '--reduce_dataset', type=float, default=0.1,
-                        help='Percentage of the dataset to keep')
     parser.add_argument('-e', '--epochs', type=int, default=10,
                         help='Number of epochs to train the model for')
-    parser.add_argument('-bs', '--batch_size', type=int, default=128,
+    parser.add_argument('-bs', '--batch_size', type=int, default=256,
                         help='Batch size to use during training')
     parser.add_argument('-lr', '--learning_rate', type=float, default=1e-4,
                         help='Learning rate to use during training')
