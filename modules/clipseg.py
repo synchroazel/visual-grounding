@@ -66,6 +66,13 @@ class ClipSeg:
 
     def _compute_hmap(self, img_sample, np_image, prompt, method, masks):
 
+        # Make sure np_image is an image with shape (h, w, 3)
+        if len(np_image.shape) > 3 or (len(np_image.shape) == 3 and np_image.shape[-1] != 3):
+            np_image = np_image[:, :, 0]
+
+        if len(np_image.shape) == 2:
+            np_image = np.stack((np_image,) * 3, axis=-1)
+
         hmaps = list()
 
         prompt_enc = self._encode_text(prompt)

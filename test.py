@@ -79,7 +79,7 @@ if __name__ == '__main__':
     parser.add_argument('-up', '--use_preset', action='store_true',
                         help='Whether to use a preset of hyperparameters for the chosen pipeline or not.')
     parser.add_argument('-yv', '--yolo_version', type=str,
-                        help='Yolo version to use (yolov5x, yolov8x). [only for yoloclip]')
+                        help='Yolo version to use (yolov5s, yolov8x). [only for yoloclip]')
     parser.add_argument('-sm', '--seg_method', type=str,
                         help='Method to use for segmentation (`s`for SLIC or `w` for Watershed) [only for segclip].')
     parser.add_argument('-ns', '--n_segments', type=int,
