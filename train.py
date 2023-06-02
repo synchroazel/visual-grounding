@@ -75,6 +75,8 @@ def training_step(net, clip_prep_, data_loader, optimizer, cost_function, device
     return cumulative_loss / n_samples, cumulative_accuracy / n_samples * 100
 
 
+
+
 def test_step(net, clip_prep_, data_loader, cost_function, device):
     samples_ = 0.0
     cumulative_loss = 0.0
@@ -305,17 +307,17 @@ def training_loop(model,
 
     # Computes evaluation results before training
     print('[INFO] Before training:')
-    train_loss, train_accuracy = test_step_fun(net, clip_prep_, train_loader, cost_function, device)
-    val_loss, val_accuracy = test_step_fun(net, clip_prep_, val_loader, cost_function, device)
+    # train_loss, train_accuracy = test_step_fun(net, clip_prep_, train_loader, cost_function, device)
+    # val_loss, val_accuracy = test_step_fun(net, clip_prep_, val_loader, cost_function, device)
     test_loss, test_accuracy = test_step_fun(net, clip_prep_, test_loader, cost_function, device)
 
     # Log to TensorBoard
-    log_values(writer, -1, "train", train_loss, train_accuracy)
-    log_values(writer, -1, "validation", val_loss, val_accuracy)
+    # log_values(writer, -1, "train", train_loss, train_accuracy)
+    # log_values(writer, -1, "validation", val_loss, val_accuracy)
     log_values(writer, -1, "test", test_loss, test_accuracy)
 
-    print('\tTraining loss {:.5f}, Training accuracy {:.2f}'.format(train_loss, train_accuracy))
-    print('\tValidation loss {:.5f}, Validation accuracy {:.2f}'.format(val_loss, val_accuracy))
+    # print('\tTraining loss {:.5f}, Training accuracy {:.2f}'.format(train_loss, train_accuracy))
+    # print('\tValidation loss {:.5f}, Validation accuracy {:.2f}'.format(val_loss, val_accuracy))
     print('\tTest loss {:.5f}, Test accuracy {:.2f}'.format(test_loss, test_accuracy))
     print('-----------------------------------------------------')
 
@@ -367,7 +369,7 @@ def main(args):
     test_ds = RefCOCOg(ds_path=args.datapath, split='test')
 
     if args.red_dataset is not None:
-        print(f"[INFO] Reducing dataset to {args.reduce_dataset * 100}% of its original size.")
+        print(f"[INFO] Reducing dataset to {args.red_dataset * 100}% of its original size.")
         keep = args.red_dataset
         dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
         train_ds, _ = random_split(train_ds, [int(keep * len(train_ds)), len(train_ds) - int(keep * len(train_ds))])
@@ -432,7 +434,7 @@ if __name__ == '__main__':
                         help='Fine-tune CLIP on RefCOCOg using a simple classifier')
     parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
                         help='path to the dataset.')
-    parser.add_argument('-rd', '--red_dataset', type=float, default=None,
+    parser.add_argument('-rd', '--red_dataset', type=float, default=0.1,
                         help='Whether to use a reduced version of the dataset or not')
     parser.add_argument('-e', '--epochs', type=int, default=10,
                         help='Number of epochs to train the model for')
@@ -450,5 +452,10 @@ if __name__ == '__main__':
                         help='Directory where to save the runs')
 
     args = parser.parse_args()
+
+    # todo: remove
+    args.simple = True
+    args.datapath = "/media/dmmp/vid+backup/Data/refcocog"
+    args.batch_size = 128
 
     main(args)

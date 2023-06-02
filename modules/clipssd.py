@@ -1,50 +1,44 @@
+import os
 import time
 
 import clip
-import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
+
 from torchvision.ops import box_iou
-from ultralytics import YOLO
+from tqdm import tqdm
 
 from .utilities import cosine_similarity, display_preds
 
 
-class YoloClip:
+class ClipSSD:
 
     def __init__(self,
                  categories,
-                 yolo_ver="yolov8x",
-                 clip_ver="RN101",
+                 confidence_t=0.5,
                  device="cpu",
                  quiet=False):
 
         self.categories = categories
-        self.yolo_ver = yolo_ver
-        self.yolo_model = YOLO(self.yolo_ver + ".pt")
-        self.clip_model, self.clip_prep = clip.load(clip_ver, device="cpu")
+        self.clip_model, self.clip_prep = clip.load("ViT-L/14", device=device)
+        self.confidence_t = confidence_t  #
         self.device = device
         self.quiet = quiet
 
-        # model is loaded to cpu first, and eventually moved to gpu
-        # (trick Mac M1 to use f16 tensors)
-        if self.device != "cpu":
-            self.clip_model = self.clip_model.to(self.device)
+        self.ssd_model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd')
+        self.utils = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd_processing_utils')
+
+        self.ssd_model.to(device)
+        self.ssd_model.eval()
 
         for category_id in categories.keys():
             cur_category = categories[category_id]['category']
-            cur_category_text = clip.tokenize(f"a photo of {cur_category}").to(self.device)
-
             with torch.no_grad():
-                cur_category_enc = self.clip_model.encode_text(cur_category_text)
-
+                cur_category_enc = self._encode_text(f"a photo of {cur_category}")
             categories[category_id].update({"encoding": cur_category_enc})
 
-        valid_yolo_versions = ["yolov8x", "yolov5s"]
-        if yolo_ver not in valid_yolo_versions:
-            raise ValueError(f"Invalid YOLO version '{yolo_ver}'. Must be one of {valid_yolo_versions}.")
-
-        print(f"[INFO] YOLO version: {yolo_ver}")
+        print(f"[INFO] Confidence treshold: {confidence_t}")
 
     def _encode_text(self, text):
         text_ = clip.tokenize(text).to(self.device)
@@ -58,31 +52,77 @@ class YoloClip:
         with torch.no_grad():
             return self.clip_model.encode_image(image_)
 
-    def __call__(self, img_sample, prompt, show=False, show_yolo=False, timeit=False):
+    def _propose(self, image_path, original_size):
+
+        def resize_bbox(bbox, in_size, out_size):
+            """Resize bounding boxes according to image resize.
+
+            Args:
+                bbox (~numpy.ndarray): See the table below.
+                in_size (tuple): A tuple of length 2. The height and the width
+                    of the image before resized.
+                out_size (tuple): A tuple of length 2. The height and the width
+                    of the image after resized.
+
+            .. csv-table::
+                :header: name, shape, dtype, format
+
+                :obj:`bbox`, ":math:`(R, 4)`", :obj:`float32`, \
+                ":math:`(y_{min}, x_{min}, y_{max}, x_{max})`"
+
+            Returns:
+                ~numpy.ndarray:
+                Bounding boxes rescaled according to the given image shapes.
+
+            """
+            bbox = bbox.copy()
+            y_scale = float(out_size[0]) / in_size[0]
+            x_scale = float(out_size[1]) / in_size[1]
+            bbox[:, 0] = y_scale * bbox[:, 0]
+            bbox[:, 2] = y_scale * bbox[:, 2]
+            bbox[:, 1] = x_scale * bbox[:, 1]
+            bbox[:, 3] = x_scale * bbox[:, 3]
+            return bbox
+
+
+        bboxes = []
+
+
+        inputs = [self.utils.prepare_input(image_path)]
+        tensor = self.utils.prepare_tensor(inputs)
+
+        with torch.no_grad():
+            detections_batch = self.ssd_model(tensor)
+
+        results_per_input = self.utils.decode_results(detections_batch)
+        best_results_per_input = [self.utils.pick_best(results, self.confidence_t) for results in results_per_input]
+
+        bbox, _, _ = best_results_per_input[0]
+        bbox *= 300
+        bbox = resize_bbox(bbox, (300,300),original_size)
+        bboxes.append(bbox)
+        return np.float32(bboxes[0]).tolist()
+
+    def __call__(self, img_sample, prompt, show=False,
+                 timeit=False):
 
         if timeit:
             start = time.time()
 
-        # Use YOLO to find relevant objects
-
+        # Convert image to np array
+        image_path = img_sample.path
         img = img_sample.img
+        bboxes = self._propose(image_path,(img_sample.shape[1],img_sample.shape[2]))
 
-        yolo_results_ = self.yolo_model(img_sample.path, verbose=False)[0]
-        yolo_results = yolo_results_.boxes.xyxy
-
-        if not self.quiet:
-            print(f"[INFO] YOLO found {yolo_results.shape[0]} objects")
-
-        if yolo_results.shape[0] == 0:
-            print(f"[WARN] YOLO ({self.yolo_ver}) couldn't find any object in {img_sample.path}!")
+        if len(bboxes) == 0:
             return {"IoU": 0, "cosine": np.nan, "euclidean": np.nan, "dotproduct": np.nan, "grounding": np.nan}
 
         # Use CLIP to encode each relevant object image
 
         images_encs = list()
 
-        for i in range(yolo_results.shape[0]):
-            bbox = yolo_results[i, 0:4].cpu().numpy()
+        for bbox in bboxes:
+            # bbox = yolo_results[i, 0:4].cpu().numpy()
 
             sub_img = img.crop(bbox)
 
@@ -105,12 +145,12 @@ class YoloClip:
         c_sims = cosine_similarity(prompt_enc, images_encs).squeeze()
 
         # Euclidean distance
-        e_dists = torch.cdist(prompt_enc, images_encs, p=2).squeeze()
+        e_dists = torch.cdist(prompt_enc.float(), images_encs.float(), p=2).squeeze()
 
         best_idx = int(c_sims.argmax())
 
         # Save predicted bbox and true bbox
-        pred_bbox = yolo_results[best_idx, 0:4].tolist()
+        pred_bbox = bboxes[best_idx]
         gt_bbox = img_sample.bbox
 
         # Compute IoU
@@ -142,15 +182,9 @@ class YoloClip:
         if not self.quiet:
             print(f"[INFO] true: {img_sample.category} | predicted: {pred_category}")
 
-        # Show objects found by YOLO, if requested
-        if show_yolo:
-            plt.imshow(yolo_results_.plot())
-            plt.axis("off")
-            plt.title("YOLO findings")
-
         # Show the final prediction, if requested
         if show:
-            display_preds(img, prompt, pred_bbox, gt_bbox, model_name="YOLO+CLIP")
+            display_preds(img, prompt, pred_bbox, gt_bbox, model_name="SSD+CLIP")
 
         # Print execution time, if requested
         if timeit:

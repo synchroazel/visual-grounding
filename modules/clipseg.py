@@ -14,7 +14,7 @@ from skimage.util import img_as_float
 from torchvision.ops import box_iou
 from tqdm import tqdm
 
-from modules.utilities import cosine_similarity, display_preds, find_best_bbox, downsample_map
+from .utilities import cosine_similarity, display_preds, find_best_bbox, downsample_map
 
 
 class ClipSeg:
@@ -80,13 +80,16 @@ class ClipSeg:
         for i, n in enumerate(masks):
 
             # Compute regions according to chosen method
-
+            segments = None
             if method == "s":
                 # SLIC segmentation algorithm ()
                 segments = slic(np_image, n_segments=n, compactness=10, sigma=1)
             elif method == "w":
                 # Watershed segmentation algorithm ()
                 segments = watershed(sobel(rgb2gray(np_image)), markers=n, compactness=0.001)
+
+            if segments is None:
+                raise Exception("Segments are None. Is method different from 's' or 'w'? ")
 
             regions = regionprops(segments)
 

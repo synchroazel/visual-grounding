@@ -6,7 +6,7 @@ import torch
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from modules.refcocog import RefCOCOgSample
+from refcocog import RefCOCOgSample
 
 OPTIMIZERS_TO_TRY = {
     "SGD": torch.optim.SGD,
@@ -17,6 +17,24 @@ OPTIMIZERS_TO_TRY = {
     # todo: add more
 }
 
+def IoU(true_bbox, predicted_bbox):
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(true_bbox[0], predicted_bbox[0])
+    yA = max(true_bbox[1], predicted_bbox[1])
+    xB = min(true_bbox[2], predicted_bbox[2])
+    yB = min(true_bbox[3], predicted_bbox[3])
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    true_bboxArea = (true_bbox[2] - true_bbox[0] + 1) * (true_bbox[3] - true_bbox[1] + 1)
+    predicted_bboxArea = (predicted_bbox[2] - predicted_bbox[0] + 1) * (predicted_bbox[3] - predicted_bbox[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = interArea / float(true_bboxArea + predicted_bboxArea - interArea)
+    # return the intersection over union value
+    return iou
 
 def get_best_device():
     if torch.cuda.is_available():
@@ -180,6 +198,36 @@ def find_best_bbox(heatmap, lower_bound=-1.0, upper_bound=1.0):
 
     return best_box
 
+
+def resize_bbox(bbox, in_size, out_size):
+    """Resize bounding boxes according to image resize.
+
+    Args:
+        bbox (~numpy.ndarray): See the table below.
+        in_size (tuple): A tuple of length 2. The height and the width
+            of the image before resized.
+        out_size (tuple): A tuple of length 2. The height and the width
+            of the image after resized.
+
+    .. csv-table::
+        :header: name, shape, dtype, format
+
+        :obj:`bbox`, ":math:`(R, 4)`", :obj:`float32`, \
+        ":math:`(y_{min}, x_{min}, y_{max}, x_{max})`"
+
+    Returns:
+        ~numpy.ndarray:
+        Bounding boxes rescaled according to the given image shapes.
+
+    """
+    bbox = bbox.copy()
+    y_scale = float(out_size[0]) / in_size[0]
+    x_scale = float(out_size[1]) / in_size[1]
+    bbox[:, 0] = y_scale * bbox[:, 0]
+    bbox[:, 2] = y_scale * bbox[:, 2]
+    bbox[:, 1] = x_scale * bbox[:, 1]
+    bbox[:, 3] = x_scale * bbox[:, 3]
+    return bbox
 
 def visual_grounding_test(vg_pipeline, dataset, logging=False):
     scores = list()

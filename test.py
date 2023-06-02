@@ -69,7 +69,7 @@ if __name__ == '__main__':
                                      formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=50))
 
     parser.add_argument('-p', '--pipeline', type=str,
-                        help='Pipeline to test (yoloclip or segclip).')
+                        help='Pipeline to test (yoloclip or clipseg).')
     parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
                         help='path to the dataset.')
     parser.add_argument('-lg', '--logging', action='store_true',
