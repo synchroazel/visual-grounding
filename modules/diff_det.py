@@ -27,7 +27,7 @@ from utilities import resize_bbox
 from refcocog import RefCOCOgSample, RefCOCOg
 
 
-# Layers strucure taken from: https://github.com/tcapelle/Diffusion-Models-pytorch/blob/main/modules.py#L200
+# Layers strucure taken from:
 # https://huggingface.co/blog/annotated-diffusion
 
 def exists(x):
