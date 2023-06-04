@@ -1,5 +1,6 @@
 import time
 
+import numpy as np
 import pandas as pd
 import torch
 import torchvision.transforms as T
@@ -34,6 +35,7 @@ class MDETRvg(VisualGroundingPipeline):
         ])
 
         print("[INFO] Initializing MDETR pipeline")
+        print("")
 
     @staticmethod
     def rescale_boxes(boxes, size):
@@ -51,6 +53,14 @@ class MDETRvg(VisualGroundingPipeline):
 
         # Get sample image
         img = Image.open(img_sample.path)
+
+        # Make sure image has shape (h, w, 3)
+        np_image = np.array(img)
+        if len(np_image.shape) > 3 or (len(np_image.shape) == 3 and np_image.shape[-1] != 3):
+            np_image = np_image[:, :, 0]
+        if len(np_image.shape) == 2:
+            np_image = np.stack((np_image,) * 3, axis=-1)
+        img = Image.fromarray(np_image)
 
         # Encode the prompt with RoBERTa
         enc_text = self.RoBERTa.batch_encode_plus([prompt], padding="longest", return_tensors="pt")

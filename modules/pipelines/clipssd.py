@@ -19,7 +19,7 @@ class ClipSSD(VisualGroundingPipeline):
             print("")
             return VisualGroundingPipeline.__new__(VisualGroundingPipeline)
         else:
-            return super(ClipSSD, cls).__new__(cls, *args, **kwargs)
+            return super(ClipSSD, cls).__new__(cls)
 
     def __init__(self,
                  categories,
