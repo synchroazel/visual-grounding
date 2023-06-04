@@ -21,4 +21,3 @@ class CustomCLIP(torch.nn.Module):
         x = self.classifier(x)
 
         return x
-

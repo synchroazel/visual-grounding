@@ -1,23 +1,13 @@
+# Results
 
-## YOLO+CLIP (baseline)
-
-### w/ YOLO v5
-Avgerage cosine similarity:     0.150     
-Avgerage euclidean similarity:  10.452  
-Avgerage dot product:           5.161           
-Avgerage IoU:                   0.528                   
-Avgerage recall:                0.609
-
-### w/ YOLO v8
-Avgerage cosine similarity:     0.238
-Avgerage euclidean similarity:  1.234
-Avgerage dot product:           5.258
-Avgerage IoU:                   0.570
-Avgerage recall:                0.363
-
-
-## Fine-tuning
-
-### w/ visual fine-tuning
-
-### w/ Contrastive Learning
+| Pipeline            | Avg. IoU | Avg. cosine sim. | Avg. euclidean dist. | Avg. dotproduct | Avg. grounding acc. |
+|---------------------|----------|------------------|----------------------|-----------------|---------------------|
+| YOLOv8x+CLIP(RN50)  | 0.554    | 0.238            | 1.234                | 5.259           | 0.353               |
+| YOLOv8x+CLIP(RN101) | 0.550    | 0.459            | 1.040                | 8.842           | 0.486               |
+| YOLOv5s+CLIP(RN50)  | 0.528    | 0.150            | 10.452               | 5.161           | 0.609               |
+| Watershed+CLIP(ViT) | 0.219    | 0.243            | 1.230                | 0.243           | 0.525               |
+| SLIC+CLIP(ViT)      |          |                  |                      |                 |                     |
+|                     |          |                  |                      |                 |                     |
+|                     |          |                  |                      |                 |                     |
+|                     |          |                  |                      |                 |                     |
+|                     |          |                  |                      |                 |                     |

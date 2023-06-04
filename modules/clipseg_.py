@@ -1,5 +1,7 @@
+import copy
 import time
 
+import clip
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,31 +16,35 @@ from torchvision.ops import box_iou
 from tqdm import tqdm
 
 from modules.utilities import cosine_similarity, display_preds, find_best_bbox, downsample_map
-from modules.vgpipeline import VisualGroundingPipeline
 
 
-class ClipSeg(VisualGroundingPipeline):
+class ClipSeg:
 
     def __init__(self,
                  categories,
                  method,
-                 n_segments,
                  clip_ver="ViT-L/14",
+                 n_segments=None,
                  q=0.95,
                  d=16,
                  device="cpu",
                  quiet=False):
 
-        VisualGroundingPipeline.__init__(self, categories, clip_ver, device, quiet)
-
+        self.categories = copy.deepcopy(categories)
         self.method = method
+        self.clip_ver = clip_ver
+        self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
         self.n_segments = n_segments
         self.q = q
         self.d = d
+        self.device = device
+        self.quiet = quiet
 
         valid_methods = ["s", "w"]
         if self.method not in valid_methods:
             raise ValueError(f"Method `{method}` not supported. Supported methods are: {valid_methods}.")
+
+        self._embed_categories()
 
         print("[INFO] Initializing ClipSeg pipeline")
         print(f"[INFO] Segmentation method: {method}")
@@ -46,6 +52,25 @@ class ClipSeg(VisualGroundingPipeline):
         print(f"[INFO] Threshold q.tile for filtering: {q}")
         print(f"[INFO] Downsampling factor: {d}")
         print("")
+
+    def _encode_text(self, text):
+        text_ = clip.tokenize(text).to(self.device)
+
+        with torch.no_grad():
+            return self.clip_model.encode_text(text_)
+
+    def _encode_img(self, image):
+        image_ = self.clip_prep(image).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            return self.clip_model.encode_image(image_)
+
+    def _embed_categories(self):
+        for category_id in self.categories.keys():
+            cur_category = self.categories[category_id]['category']
+            with torch.no_grad():
+                cur_category_enc = self._encode_text(f"a photo of {cur_category}")
+            self.categories[category_id].update({"encoding": cur_category_enc})
 
     def _compute_hmap(self, img_sample, np_image, prompt, method, masks):
 
@@ -119,15 +144,9 @@ class ClipSeg(VisualGroundingPipeline):
         if timeit:
             start = time.time()
 
-        """ Pipeline core """
-
-        # Get sample image
-        img = img_sample.img
-
         # Convert image to np array
         np_image = img_as_float(io.imread(img_sample.path))
 
-        # Compute an heatmap of CLIP scores
         p_heatmap, heatmaps = self._compute_hmap(img_sample, np_image, prompt, self.method, self.n_segments)
 
         # Shut down pixels below a certain threshold
@@ -150,30 +169,40 @@ class ClipSeg(VisualGroundingPipeline):
                          pred_bbox[2] * self.d - self.d // 2,
                          pred_bbox[3] * self.d - self.d // 2]
 
-        # Use CLIP to encode the text prompt
-        prompt_enc = self._encode_text(prompt).float()
-
-        # Crop around the best bbox and encode
-        pred_image = img.crop(pred_bbox)
-        pred_image_enc = self._encode_img(pred_image)
+        # Convert bbox format
+        pred_bbox = [pred_bbox[0], pred_bbox[1], pred_bbox[2] + pred_bbox[0], pred_bbox[3] + pred_bbox[1]]
 
         # Get ground truth bbox
         gt_bbox = img_sample.bbox
 
-        """ Metrics computation """
-
         # Compute IoU
-        iou = self._IoU(pred_bbox, gt_bbox)
-
-        # Compute grounding accuracy
-        grd_correct = self._grounding_accuracy(img_sample, pred_image_enc)
+        iou = box_iou(
+            torch.tensor(pred_bbox).unsqueeze(0),
+            torch.tensor(gt_bbox).unsqueeze(0)
+        ).item()
 
         # Compute distance metrics
-        dotproduct = prompt_enc @ pred_image_enc.T  # dot product
-        cosine_sim = cosine_similarity(prompt_enc, pred_image_enc)  # cosine similarity
-        euclidean_dist = torch.cdist(prompt_enc, pred_image_enc, p=2).squeeze()  # euclidean distance
+        pred_img = img_sample.img.crop(gt_bbox)
+        pred_image_enc = self._encode_img(pred_img).float()
+        prompt_enc = self._encode_text(prompt).float()
 
-        """ Display results """
+        cosine_sim = cosine_similarity(prompt_enc, pred_image_enc)
+        euclidean_dist = torch.cdist(prompt_enc, pred_image_enc, p=2).squeeze()
+        dotproduct = prompt_enc @ pred_image_enc.T
+
+        # Compute grounding accuracy
+
+        all_c_sims = dict()
+
+        for category_id in self.categories.keys():
+            cur_categ = self.categories[category_id]['category']
+            cur_categ_enc = self.categories[category_id]['encoding'].float()
+
+            all_c_sims[cur_categ] = cosine_similarity(pred_image_enc, cur_categ_enc)
+
+        pred_category = max(all_c_sims, key=all_c_sims.get)
+
+        grd_correct = 1 if pred_category == img_sample.category else 0
 
         # Show all masks, if requested
         if show_masks:
