@@ -4,16 +4,15 @@ import argparse
 
 from torch.utils.data import random_split
 
-from modules.clipseg import ClipSeg
-from modules.clipseg_ import ClipSeg
-from modules.clipssd import ClipSSD
-from modules.detrclip import DetrClip
-from modules.mdetr import MDETRvg
+from modules.pipelines.clipseg import ClipSeg
+from modules.pipelines.clipssd import ClipSSD
+from modules.pipelines.detrclip import DetrClip
+from modules.pipelines.mdetr import MDETRvg
 from modules.refcocog import RefCOCOg
 from modules.utilities import visual_grounding_test, get_best_device
-from modules.yoloclip import YoloClip
+from modules.pipelines.yoloclip import YoloClip
 
-supported_pipelines = ["yoloclip", "clipseg", "detrclip", "clipssd", "medtr"]
+supported_pipelines = ["yoloclip", "clipseg", "detrclip", "clipssd", "mdetr"]
 
 
 def main(args):
@@ -34,39 +33,53 @@ def main(args):
     print(f"[INFO] Dataset Size: {len(dataset)}")
     print(f"[INFO] test split:   {len(test_ds)}")
 
+    if args.clip_version is None:
+        args.clip_version = "RN50"
+        print(f"[INFO] No CLIP version specified. Using {args.clip_version}")
+
     if args.pipeline == "yoloclip":
+
+        if args.yolo_version is None:
+            args.yolo_version = "yolov8x"
+            print(f"[INFO] No YOLO version specified. Using {args.yolo_version}")
+
         pipeline = YoloClip(dataset.categories,
                             clip_ver=args.clip_version,
                             yolo_ver=args.yolo_version,
-                            quiet=True,
                             device=device)
 
     if args.pipeline == "clipseg":
+
+        if args.seg_method is None or args.n_segments is None or args.threshold is None:
+            raise ValueError(f"Pipeline `{args.pipeline}` need the following arguments:"
+                             f"`seg_method`, `n_segments` and `threshold`.")
+
         pipeline = ClipSeg(dataset.categories,
                            clip_ver=args.clip_version,
                            method=args.seg_method,
                            n_segments=args.n_segments,
                            q=args.threshold,
-                           quiet=True,
                            device=device)
 
     if args.pipeline == "detrclip":
         pipeline = DetrClip(dataset.categories,
                             clip_ver=args.clip_version,
-                            quiet=True,
                             device=device)
 
     if args.pipeline == "clipssd":
+
+        if args.confidence_t is None:
+            raise ValueError(f"Pipeline `{args.pipeline}` need the following arguments:"
+                             f"`confidence_t`.")
+
         pipeline = ClipSSD(dataset.categories,
                            clip_ver=args.clip_version,
                            confidence_t=args.confidence_t,
-                           quiet=True,
                            device=device)
 
-    if args.pipeline == "medtr":
+    if args.pipeline == "mdetr":
         pipeline = MDETRvg(dataset.categories,
                            clip_ver=args.clip_version,
-                           quiet=True,
                            device=device)
 
     print(f"[INFO] Starting test\n")

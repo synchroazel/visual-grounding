@@ -6,7 +6,7 @@ import torch
 from ultralytics import YOLO
 
 from modules.utilities import cosine_similarity, display_preds
-from modules.vgpipeline import VisualGroundingPipeline
+from modules.pipelines.vgpipeline import VisualGroundingPipeline
 
 
 class YoloClip(VisualGroundingPipeline):
@@ -16,7 +16,7 @@ class YoloClip(VisualGroundingPipeline):
                  yolo_ver="yolov8x",
                  clip_ver="RN50",
                  device="cpu",
-                 quiet=False):
+                 quiet=True):
 
         VisualGroundingPipeline.__init__(self, categories, clip_ver, device, quiet)
 

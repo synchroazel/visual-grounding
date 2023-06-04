@@ -8,8 +8,8 @@ from torchmultimodal.models.mdetr.model import mdetr_for_phrase_grounding
 from torchvision.ops.boxes import box_convert
 from transformers import RobertaTokenizerFast
 
+from modules.pipelines.vgpipeline import VisualGroundingPipeline
 from modules.utilities import display_preds, cosine_similarity
-from modules.vgpipeline import VisualGroundingPipeline
 
 
 class MDETRvg(VisualGroundingPipeline):

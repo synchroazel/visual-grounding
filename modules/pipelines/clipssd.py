@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from modules.utilities import cosine_similarity, display_preds
-from modules.vgpipeline import VisualGroundingPipeline
+from modules.pipelines.vgpipeline import VisualGroundingPipeline
 
 
 class ClipSSD(VisualGroundingPipeline):
@@ -26,7 +26,7 @@ class ClipSSD(VisualGroundingPipeline):
                  confidence_t=0.5,
                  clip_ver="ViT-L/14",
                  device="cpu",
-                 quiet=False):
+                 quiet=True):
 
         VisualGroundingPipeline.__init__(self, categories, clip_ver, device, quiet)
 

@@ -8,7 +8,7 @@ from transformers import AutoImageProcessor, DetrForObjectDetection
 from transformers.utils import logging
 
 from modules.utilities import cosine_similarity, display_preds
-from modules.vgpipeline import VisualGroundingPipeline
+from modules.pipelines.vgpipeline import VisualGroundingPipeline
 
 
 class DetrClip(VisualGroundingPipeline):
@@ -16,7 +16,7 @@ class DetrClip(VisualGroundingPipeline):
                  categories,
                  clip_ver="RN50",
                  device="cpu",
-                 quiet=False):
+                 quiet=True):
 
         logging.set_verbosity_error()
 

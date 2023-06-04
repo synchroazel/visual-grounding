@@ -13,7 +13,7 @@ class VisualGroundingPipeline:
                  categories,
                  clip_ver="RN50",
                  device="cpu",
-                 quiet=False):
+                 quiet=True):
         self.categories = copy.deepcopy(categories)
         self.clip_ver = clip_ver
         self.clip_model, self.clip_prep = clip.load(clip_ver, device="cpu")
