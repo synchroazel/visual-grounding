@@ -122,55 +122,6 @@ def test_step(net, clip_prep_, data_loader, cost_function, device):
     return cumulative_loss / samples_, cumulative_accuracy / samples_ * 100
 
 
-def training_step_cl(net, clip_prep_, data_loader, optimizer, cost_function, device):
-    n_samples = 0.0
-    cumulative_loss = 0.0
-
-    # set the network to training mode
-    net.train()
-
-    for batch_idx, batch in enumerate(tqdm(data_loader, desc="[INFO] Training step")):
-
-        images, texts = list(), list()
-
-        for sample in batch:
-            sample = RefCOCOgSample(**sample)
-
-            for sentence in sample.sentences:
-                prep_img = sample.img.crop(sample.bbox)
-                prep_img = clip_prep_(prep_img)
-
-                images.append(prep_img)
-                texts.append(sentence)
-
-        texts = clip.tokenize(texts).to(device)
-        images = torch.stack(images).to(device)
-
-        images = images.to(device)
-        texts = texts.to(device)
-
-        # forward pass
-        image_logits, text_logits = net(images, texts)
-
-        # loss computation
-        loss = contrastive_loss(image_logits, text_logits, cost_function)
-
-        # backward pass
-        loss.backward()
-
-        # parameters update
-        optimizer.step()
-
-        # gradients reset
-        optimizer.zero_grad()
-
-        # fetch loss value
-        n_samples += images.shape[0]
-        cumulative_loss += loss.item()
-
-    return cumulative_loss / n_samples
-
-
 """ Contrastive Learning training logic """
 
 

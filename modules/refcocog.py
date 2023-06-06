@@ -44,7 +44,7 @@ class RefCOCOgSample:
 
 class RefCOCOg(Dataset):
     """
-    Dataloader for RefCOCOg dataset.
+    Dataset object for RefCOCOg dataset.
 
     """
 

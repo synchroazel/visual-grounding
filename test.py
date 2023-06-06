@@ -35,7 +35,9 @@ def main(args):
 
     if args.clip_version is None:
         args.clip_version = "RN50"
-        print(f"[INFO] No CLIP version specified. Using {args.clip_version}")
+        print(f"[INFO] No CLIP version specified. Using {args.clip_version}.")
+    else:
+        print(f"[INFO] Using CLIP version: {args.clip_version}")
 
     if args.pipeline == "yoloclip":
 
@@ -50,15 +52,22 @@ def main(args):
 
     if args.pipeline == "clipseg":
 
-        if args.seg_method is None or args.n_segments is None or args.threshold is None:
-            raise ValueError(f"Pipeline `{args.pipeline}` need the following arguments:"
-                             f"`seg_method`, `n_segments` and `threshold`.")
+        if args.seg_method is None:
+            args.seg_method = "w"
+            print(f"[INFO] No segmentation method specified. Using Watershed.")
+        if args.n_segments is None:
+            args.n_segments = (4, 8, 16, 32)
+            print(f"[INFO] No number of segments specified. Using {args.n_segments}.")
+        if args.threshold is None:
+            args.threshold = 0.75
+            print(f"[INFO] No threshold specified. Using {args.threshold}.")
 
         pipeline = ClipSeg(dataset.categories,
                            clip_ver=args.clip_version,
                            method=args.seg_method,
                            n_segments=args.n_segments,
                            q=args.threshold,
+                           quiet=True,
                            device=device)
 
     if args.pipeline == "detrclip":
@@ -100,12 +109,12 @@ if __name__ == '__main__':
     parser.add_argument('-rd', '--red_dataset', type=float, default=None,
                         help='Whether to use a reduced version of the dataset or not')
     parser.add_argument('-cv', '--clip_version', type=str,
-                        help='CLIP version to use (ViT-B/32, RN50, RN101, RN50x4)')
+                        help='CLIP version to use (RN50, RN101, ViT-L/14)')
     parser.add_argument('-yv', '--yolo_version', type=str,
                         help='Yolo version to use (yolov5s, yolov8x). [only for yoloclip]')
     parser.add_argument('-sm', '--seg_method', type=str,
                         help='Method to use for segmentation (`s`for SLIC or `w` for Watershed) [only for segclip].')
-    parser.add_argument('-ns', '--n_segments', type=int,
+    parser.add_argument('-ns', '--n_segments', type=list,
                         help='Number of segments to use for segmentation [only for segclip].')
     parser.add_argument('-ts', '--threshold', type=float,
                         help='Threshold for filtering CLIP heatmap [only for segclip].')

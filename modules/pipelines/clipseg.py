@@ -10,10 +10,11 @@ from skimage.filters import sobel
 from skimage.measure import regionprops
 from skimage.segmentation import slic, watershed
 from skimage.util import img_as_float
+from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from modules.utilities import cosine_similarity, display_preds, find_best_bbox, downsample_map
 from modules.pipelines.vgpipeline import VisualGroundingPipeline
+from modules.utilities import cosine_similarity, display_preds, downsample_map
 
 
 class ClipSeg(VisualGroundingPipeline):
@@ -113,7 +114,37 @@ class ClipSeg(VisualGroundingPipeline):
 
         return pmap, hmaps
 
-    def __call__(self, img_sample, prompt, show=False, show_pipeline=False, show_masks=False, timeit=False):
+    @staticmethod
+    def _find_best_bbox(heatmap, lower_bound=-1.0, upper_bound=1.0):
+        # Rescale the heatmap
+        heatmap = MinMaxScaler(feature_range=(lower_bound, upper_bound)).fit_transform(heatmap)
+
+        # Initialize the best score and best box
+        best_score = float('-inf')
+        best_box = None
+
+        # Loop over all possible box sizes and positions
+        for w in range(1, heatmap.shape[1] + 1):
+            for h in range(1, heatmap.shape[0] + 1):
+                for i in range(heatmap.shape[1] - w + 1):
+                    for j in range(heatmap.shape[0] - h + 1):
+
+                        # Get current sub-region
+                        candidate = heatmap[j:j + h, i:i + w]
+
+                        # Compute the score for this box
+                        score = candidate.sum()
+
+                        # Update the best score and best box if necessary
+                        if score > best_score:
+                            best_score = score
+                            best_box = (i, j, w, h)
+
+        best_box = [best_box[0], best_box[1], best_box[2] + best_box[0], best_box[3] + best_box[1]]
+
+        return best_box
+
+    def __call__(self, img_sample, prompt, show=False, show_process=False, show_masks=False, timeit=False):
 
         if timeit:
             start = time.time()
@@ -138,7 +169,7 @@ class ClipSeg(VisualGroundingPipeline):
         dfp_heatmap = downsample_map(fp_heatmap, self.d)
 
         # Find the best bounding box
-        pred_bbox = find_best_bbox(dfp_heatmap, lower_bound=-0.75)
+        pred_bbox = self._find_best_bbox(dfp_heatmap, lower_bound=-0.75)
 
         if pred_bbox is None:
             return {"IoU": 0, "cosine": np.nan, "euclidean": np.nan, "dotproduct": np.nan, "grounding": np.nan}
@@ -187,7 +218,7 @@ class ClipSeg(VisualGroundingPipeline):
                 axes[i].set_title(f"#{i + 1}")
 
         # Show the mask processing pipeline, if requested
-        if show_pipeline:
+        if show_process:
             fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
             for ax in axes.ravel():
