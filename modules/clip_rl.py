@@ -5,6 +5,7 @@ import pickle
 import random
 import shutil
 
+import PIL.Image
 import matplotlib
 import matplotlib.pyplot as plt
 from collections import namedtuple, deque
@@ -26,9 +27,7 @@ from clip import clip
 # https://arxiv.org/pdf/2208.04511.pdf
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward','next_state', ))
-
-
+                        ('state', 'action', 'reward', 'next_state',))
 
 
 class DQN(nn.Module):
@@ -46,130 +45,179 @@ class DQN(nn.Module):
         x = F.leaky_relu(self.layer2(x))
         return self.layer3(x)
 
+BBOX_LOW_LIMIT = 0
+BBOX_HIGH_LIMIT = 1000
 
 def move_right(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
+    Aw = abs(alpha * (bbox[2] - bbox[0]))
     # Ah = alpha * (bbox[3] - bbox[1])
 
-    return [bbox[0] + Aw, bbox[1], bbox[2] + Aw, bbox[3]], True
+    right = bbox[2] + Aw if bbox[2] + Aw < BBOX_HIGH_LIMIT else BBOX_HIGH_LIMIT
+
+    return [bbox[0] + Aw, bbox[1], right, bbox[3]], True
 
 
 def move_left(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
+    Aw = abs(alpha * (bbox[2] - bbox[0]))
     # Ah = alpha * (bbox[3] - bbox[1])
 
-    return [bbox[0] - Aw, bbox[1], bbox[2] - Aw, bbox[3]], True
+    left = bbox[0] - Aw if bbox[0] - Aw > BBOX_LOW_LIMIT else BBOX_LOW_LIMIT
+
+    return [left, bbox[1], bbox[2] - Aw, bbox[3]], True
 
 
 def move_up(bbox, alpha: float) -> tuple:
     # Aw = alpha * (bbox[2] - bbox[0])
-    Ah = alpha * (bbox[3] - bbox[1])
+    Ah = abs(alpha * (bbox[3] - bbox[1]))
 
-    return [bbox[0], bbox[1] - Ah, bbox[2], bbox[3] - Ah], True
+    up = bbox[1] - Ah if bbox[1] - Ah > BBOX_LOW_LIMIT else BBOX_LOW_LIMIT
+    return [bbox[0], up, bbox[2], bbox[3] - Ah], True
 
 
 def move_down(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
-    Ah = alpha * (bbox[3] - bbox[1])
+    # Aw = abs(alpha * (bbox[2] - bbox[0]))
+    Ah = abs(alpha * (bbox[3] - bbox[1]))
 
-    return [bbox[0], bbox[1] + Ah, bbox[2], bbox[3] + Ah], True
+    down = bbox[3] + Ah if bbox[3] + Ah < BBOX_HIGH_LIMIT else BBOX_HIGH_LIMIT
+    return [bbox[0], bbox[1] + Ah, bbox[2],down], True
 
 
 def make_bigger(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
-    Ah = alpha * (bbox[3] - bbox[1])
+    Aw = abs(alpha * (bbox[2] - bbox[0]))
+    Ah = abs(alpha * (bbox[3] - bbox[1]))
 
-    return [bbox[0] - Aw, bbox[1] - Ah, bbox[2] + Aw, bbox[3] + Ah], True
+    left = bbox[0] - Aw if bbox[0] - Aw > BBOX_LOW_LIMIT else BBOX_LOW_LIMIT
+    right = bbox[2] + Aw if bbox[2] + Aw < BBOX_HIGH_LIMIT else BBOX_HIGH_LIMIT
+    up = bbox[1] - Ah if bbox[1] - Ah > BBOX_LOW_LIMIT else BBOX_LOW_LIMIT
+    down = bbox[3] + Ah if bbox[3] + Ah < BBOX_HIGH_LIMIT else BBOX_HIGH_LIMIT
+
+    return [left, up, right, down], True
 
 
 def make_smaller(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
-    Ah = alpha * (bbox[3] - bbox[1])
+    Aw = abs(alpha * (bbox[2] - bbox[0]))
+    Ah = abs(alpha * (bbox[3] - bbox[1]))
 
     return [bbox[0] + Aw, bbox[1] + Ah, bbox[2] - Aw, bbox[3] - Ah], True
 
 
 def make_fatter(bbox, alpha: float) -> tuple:
     # Aw = alpha * (bbox[2] - bbox[0])
-    Ah = alpha * (bbox[3] - bbox[1])
+    Ah = abs(alpha * (bbox[3] - bbox[1]))
 
     return [bbox[0], bbox[1] + Ah, bbox[2], bbox[3] - Ah], True
 
 
 def make_taller(bbox, alpha: float) -> tuple:
-    Aw = alpha * (bbox[2] - bbox[0])
+    Aw = abs(alpha * (bbox[2] - bbox[0]))
     # Ah = alpha * (bbox[3] - bbox[1])
 
     return [bbox[0] + Aw, bbox[1], bbox[2] - Aw, bbox[3]], True
 
-
-def stop(bbox, alpha):
+def stop(bbox, *args):
     return bbox, False
+
+def get_image_center_bb(image_w, image_h):
+
+    w_quarter = image_w / 4
+    h_quarter = image_h / 4
+
+    return [w_quarter,h_quarter,image_w-w_quarter, image_h-h_quarter]
 
 
 class RL_Clip(nn.Module):
     def __init__(self, actions=("left", 'right', 'top', 'down', 'bigger', 'smaller', 'fatter', 'taller', 'trigger'),
                  clip_ver="RN101", device='cuda',
-                 maximum_past_actions_memory=10, random_factor=0.2, *args,
+                 maximum_past_actions_memory=10, random_factor=0.9, *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.device = device
         self.possible_actions = actions
-        self.actions_code = {"left":0, 'right':1, 'top':2, 'down':3, 'bigger':4, 'smaller':5, 'fatter':6, 'taller':7, 'trigger':8}
+        self.actions_code = {"left": 0, 'right': 1, 'top': 2, 'down': 3, 'bigger': 4, 'smaller': 5, 'fatter': 6,
+                             'taller': 7, 'trigger': 8}
+        self.actions_dummies = {"left": (1, 0, 0, 0, 0, 0, 0, 0, 0),
+                                'right': (0, 1, 0, 0, 0, 0, 0, 0, 0),
+                                'top': (0, 0, 1, 0, 0, 0, 0, 0, 0),
+                                'down': (0, 0, 0, 1, 0, 0, 0, 0, 0),
+                                'bigger': (0, 0, 0, 0, 1, 0, 0, 0, 0),
+                                'smaller': (0, 0, 0, 0, 0, 1, 0, 0, 0),
+                                'fatter': (0, 0, 0, 0, 0, 0, 1, 0, 0),
+                                'taller': (0, 0, 0, 0, 0, 0, 0, 1, 0),
+                                'trigger': (0, 0, 0, 0, 0, 0, 0, 0, 1),
+                                }
         self.actions = {"left": move_left, 'right': move_right, 'top': move_up, 'down': move_down,
                         'bigger': make_bigger,
                         'smaller': make_smaller, 'fatter': make_fatter, 'taller': make_taller, 'trigger': stop}
         self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
         self.history_vector = torch.zeros([len(actions) * maximum_past_actions_memory]).to(device)
-        in_dim = 40  # clip output
-        self.IoU_treshold = 0.5
+        self.IoU_treshold = 0.7
         self.trigger_final_reward = 3
         self.maximum_past_actions_memory = maximum_past_actions_memory
         self.past_actions = torch.zeros((1, len(actions) * self.maximum_past_actions_memory)).to(
             device)  # past action tensor, one-hot encoded
-        self.lr = 0.0001  # learning rate
-        self.alpha = 0.5
+        self.lr = 0.001  # learning rate
+        self.alpha = 0.3
         self.random_factor = random_factor
-        self.buffer_exparience_replay = 1000
+        self.buffer_exparience_replay = 15_000
+        self._memory_update_index = 0
 
         # start the rewards table
         self.replay = []
         # G_state = G_state + α(target — G_state)
 
         self.policy_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory, len(actions)).to(device)
-        self.target_net = DQN(512 * 2 +  len(actions) * self.maximum_past_actions_memory, len(actions)).to(device)
+        self.target_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory, len(actions)).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
-        # self.steps_done = 0
+
+        self.steps_done = 0
+        self.EPS_END = 0.05
+        self.EPS_START = 0.9
+        self.EPS_DECAY = 1000
 
     def init_reward(self, states):
         for action in states:
             self.G[action] = np.random.uniform(high=1.0, low=0.1)  # initialize with random values
 
-    def choose_action(self, bbox, ground_truth_bbox):
-        maxG = -10e15
+    def choose_action(self, bbox, ground_truth_bbox)->str:
+        """
+
+        :param bbox:
+        :param ground_truth_bbox:
+        :return:
+        """
         next_move = None
-        randomN = np.random.random()
-        if randomN < self.randomFactor:
+        randomN = random.random()
+        if randomN < self.random_factor:
             # if random number below random factor, choose random action
             next_move = np.random.choice(self.possible_actions)
         else:
             # if exploiting, gather all possible actions and choose one with the highest G (reward)
+            good_actions = []
             for action in self.possible_actions:
-                new_bbox = self.actions[action](bbox, self.alpha)
+                new_bbox, _ = self.actions[action](bbox, self.alpha)
                 if action == 'trigger':
                     reward = self.trigger_reward_function(predicted_bbox=new_bbox, ground_truth_box=ground_truth_bbox)
                 else:
                     reward = self.movement_reward_function(previous_predicted_bbox=bbox, predicted_bbox=new_bbox,
                                                            ground_truth_box=ground_truth_bbox)
-                if reward >= maxG:
-                    next_move = action
-                    maxG = reward
+                if reward >= 0:
+                    if reward == 3:
+                        good_actions = [action]
+                    else:
+                        good_actions.append(action)
+            if len(good_actions) != 0:
+                next_move = random.choice(good_actions)
+            else:
+                next_move = random.choice(self.possible_actions)
+        self.random_factor = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(
+            -1. * self.steps_done / self.EPS_DECAY)
+        self.steps_done += 1
         return next_move
 
     def movement_reward_function(self, previous_predicted_bbox, predicted_bbox, ground_truth_box):
-        return numpy.sign(IoU(ground_truth_box, previous_predicted_bbox) - IoU(ground_truth_box, predicted_bbox))
+        return -1 if IoU(ground_truth_box, previous_predicted_bbox) <= IoU(ground_truth_box, predicted_bbox) else 1
 
     def trigger_reward_function(self, predicted_bbox, ground_truth_box):
         if IoU(ground_truth_box, predicted_bbox) >= self.IoU_treshold:
@@ -177,31 +225,11 @@ class RL_Clip(nn.Module):
         else:
             return -self.trigger_final_reward
 
-    def update_history_vector(self, action: str):
-        action_vector = torch.zeros(self.maximum_past_actions_memory)
-        action_vector[self.possible_actions.index(action)] = 1
-        size_history_vector = len(torch.nonzero(self.history_vector))
-        number_of_actions = len(self.possible_actions)
-        updated_history_vector = torch.zeros(self.maximum_past_actions_memory * number_of_actions)
-        if size_history_vector < self.maximum_past_actions_memory:
-            aux2 = 0
-            for l in range(number_of_actions * size_history_vector,
-                           number_of_actions * size_history_vector + number_of_actions - 1):
-                self.history_vector[l] = action_vector[aux2]
-                aux2 += 1
-        else:
-            for j in range(0, number_of_actions * (self.maximum_past_actions_memory - 1) - 1):
-                updated_history_vector[j] = self.history_vector[j + number_of_actions]
-            aux = 0
-            for k in range(number_of_actions * (self.maximum_past_actions_memory - 1),
-                           number_of_actions * self.maximum_past_actions_memory):
-                updated_history_vector[k] = action_vector[aux]
-                aux += 1
-            self.history_vector = updated_history_vector
-
     def get_state(self, clip_embedding):
         clip_embedding = clip_embedding.to(self.device)
-        history_vector = torch.reshape(self.history_vector, (len(self.possible_actions) * self.maximum_past_actions_memory, 1)).to(self.device)
+        history_vector = torch.reshape(self.history_vector,
+                                       (len(self.possible_actions) * self.maximum_past_actions_memory, 1)).to(
+            self.device)
         state = torch.vstack((clip_embedding.T, history_vector))
         return state.to(self.device)
 
@@ -210,6 +238,19 @@ class RL_Clip(nn.Module):
 
         with torch.no_grad():
             return self.clip_model.encode_text(text_)
+
+    def update_history_vector(self, action: str):
+        if self.maximum_past_actions_memory <= 0:
+            return
+        if self._memory_update_index == 0:
+            self.past_actions = torch.zeros(self.maximum_past_actions_memory * len(self.possible_actions))
+        start = self._memory_update_index * len(self.possible_actions)
+        end = start + len(self.possible_actions)
+        self.past_actions[start:end] = torch.tensor(self.actions_dummies[action]).squeeze()
+        if self._memory_update_index < self.maximum_past_actions_memory-1:
+            self._memory_update_index += 1
+        else:
+            self._memory_update_index = 0
 
     def _encode_img(self, image):
         image_ = self.clip_prep(image).unsqueeze(0).to(self.device)
@@ -229,7 +270,7 @@ class RL_Clip(nn.Module):
 if __name__ == "__main__":
     from utilities import IoU
 
-    agent = RL_Clip()
+    agent = RL_Clip(maximum_past_actions_memory=0)
     print("Loading dataset")
     data_path = "/media/dmmp/vid+backup/Data/refcocog"
     # data_path = "dataset/refcocog"
@@ -247,8 +288,8 @@ if __name__ == "__main__":
     red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
     if train:
         print("Instantiating model")
-        net = RL_Clip()
-        red_train_ds, _ = random_split(train_ds, [int(keep * len(train_ds)), len(train_ds) - int(keep * len(train_ds))])
+
+        red_train_ds, _ = random_split(red_dataset, [int(len(red_dataset)), len(red_dataset) - int(len(red_dataset))])
         train_loader = torch.utils.data.DataLoader(red_train_ds, batch_size=batch_size, shuffle=True,
                                                    collate_fn=lambda x: x)
         del _
@@ -260,6 +301,7 @@ if __name__ == "__main__":
         gamma = 0.9
         memory_pointer = -1
         TAU = 0.005
+        BB_LENGTH_LIMIT = 10 # if a BB is smaller than 10x10, the agent is penalized
         for epoch in tqdm(range(epochs)):
             epsilon = 1
             for step, batch in enumerate(train_loader):
@@ -269,16 +311,19 @@ if __name__ == "__main__":
                 gt_bboxes = []
                 initial_bboxes = []
                 sentences = []
+                images = []
                 for element in batch:
                     for sentence in element['sentences']:
-                        embeddings.append(net.encoder(element['img'], sentence))
+                        embeddings.append(agent.encoder(element['img'], sentence))
                         gt_bboxes.append(element['bbox'])
-                        initial_bboxes.append([0, 0, element['img'].width, element['img'].height])
+                        initial_bboxes.append([0,0,element['img'].width,element['img'].height])# get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
                         sentences.append(sentence)
-
-                for i, embedding in tqdm(enumerate(embeddings)):
+                        images.append(element['img'])
+                print("Batch processing")
+                for i, embedding in enumerate(embeddings):
                     bbox = gt_bboxes[i]
                     old_bbox = initial_bboxes[i]
+                    image = images[i]
                     step = 0
                     reward = 0
                     masked = 0
@@ -286,105 +331,113 @@ if __name__ == "__main__":
                     # status indicates whether the agent is still alive and has not triggered the terminal action
                     status = True
                     action = 0
-                    input = net.get_state(clip_embedding=embedding)
+                    input = agent.get_state(clip_embedding=embedding)
                     while status and (step < maximum_steps):
-                        qval = net.policy_net.forward(input.T)
-                        if epsilon > random.random():
-                            action = random.choice(net.possible_actions)
-                            epsilon += 0.01
-                        else:
-                            action = net.possible_actions[torch.argmax(qval).item()]
-                        new_bbox, status = net.actions[action](old_bbox, alpha)
+                        action = agent.choose_action(old_bbox, bbox)
+                        new_bbox, status = agent.actions[action](old_bbox, agent.alpha)
                         if action != 'trigger':
-                            reward = net.movement_reward_function(predicted_bbox=new_bbox,
-                                                                  previous_predicted_bbox=old_bbox,
-                                                                  ground_truth_box=bbox)
+                            reward = agent.movement_reward_function(predicted_bbox=new_bbox,
+                                                                    previous_predicted_bbox=old_bbox,
+                                                                    ground_truth_box=bbox)
                         else:
-                            reward = net.trigger_reward_function(predicted_bbox=new_bbox, ground_truth_box=bbox)
-                        net.update_history_vector(action)
+                            reward = agent.trigger_reward_function(predicted_bbox=new_bbox, ground_truth_box=bbox)
+                        agent.update_history_vector(action)
                         step += 1
 
-                        # get new features
+                        # special cases
                         try:
-                            new_img = batch[i]['img'].crop(new_bbox)
-
-                        except IndexError:
-                                break
+                            new_img = image.crop(new_bbox)
+                        except PIL.Image.DecompressionBombError:
+                            # the image is too big
+                            new_img = image
+                            reward = -agent.trigger_final_reward
+                        # the image is too small
+                        if ((new_bbox[2] - new_bbox[0]) < BB_LENGTH_LIMIT) or ((new_bbox[3] - new_bbox[1]) < BB_LENGTH_LIMIT):
+                            reward = -agent.trigger_final_reward
                         try:
-                            encoding = net.encoder(new_img, sentences[i])
+                            encoding = agent.encoder(new_img, sentences[i])
                         except ZeroDivisionError:
-                            encoding = net.encoder(batch[i]['img'], sentences[i])
-                        new_input = net.get_state(encoding)
+                            encoding = agent.encoder(image, sentences[i])
+                        new_input = agent.get_state(encoding)
 
                         # Experience replay storage
-                        if len(net.replay) < net.buffer_exparience_replay:
-                            net.replay.append((input, action, reward, new_input))
+                        if len(agent.replay) < agent.buffer_exparience_replay:
+                            agent.replay.append((input, action, reward, new_input))
                         else:
-                            print("Starting memory replay")
-                            memory_pointer = memory_pointer + 1 if memory_pointer < net.buffer_exparience_replay else 0
-                            net.replay[memory_pointer] = (input, action, reward, new_input)
+                            # print("Starting memory replay")
+                            agent.steps_done +=1
+                            memory_pointer = memory_pointer + 1 if memory_pointer < agent.buffer_exparience_replay - 1 else 0
+                            agent.replay[memory_pointer] = (input, action, reward, new_input)
 
-                            transitions = random.sample(net.replay, batch_size)
+                            transitions = random.sample(agent.replay, batch_size)
                             minibatch = Transition(*zip(*transitions))
                             # we pick from the replay memory a sampled minibatch and generate the training samples
 
                             non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                                                     minibatch.next_state)), device=device,
                                                           dtype=torch.bool)
-                            non_final_next_states = torch.cat([s for s in minibatch.next_state
-                                                               if s is not None])
+                            non_final_next_states = torch.squeeze(torch.stack(minibatch.next_state))
                             state_batch = torch.squeeze(torch.stack(minibatch.state)).to(device)
-                            action_batch = torch.tensor([net.actions_code[action] for action in minibatch.action]).to(device)
+                            action_batch = torch.tensor(
+                                [agent.actions_dummies[action] for action in minibatch.action]).to(
+                                device)
                             reward_batch = torch.tensor(minibatch.reward).to(device)
 
                             # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
                             # columns of actions taken. These are the actions which would've been taken
-                            # for each batch state according to policy_net
-                            q = net.policy_net(state_batch)
-                            state_action_values = q.gather(0, action_batch)
+                            # for each batch state according to policy_agent
+                            q = agent.policy_net(state_batch)
+                            state_action_values = q.gather(1, action_batch)[:, 1].squeeze()
                             next_state_values = torch.zeros(batch_size, device=device)
                             with torch.no_grad():
-                                next_state_values[non_final_mask] = net.target_net(non_final_next_states).max(1)[0]
+                                next_state_values[non_final_mask] = agent.target_net(non_final_next_states).max(1)[0]
                             expected_state_action_values = (next_state_values * gamma) + reward_batch
                             # Compute Huber loss
                             criterion = nn.SmoothL1Loss()
-                            loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+                            loss = criterion(state_action_values, expected_state_action_values)
 
                             # Optimize the model
-                            net.optimizer.zero_grad()
+                            agent.optimizer.zero_grad()
                             loss.backward()
                             # In-place gradient clipping
-                            torch.nn.utils.clip_grad_value_(net.policy_net.parameters(), 100)
-                            net.optimizer.step()
-
-
+                            torch.nn.utils.clip_grad_value_(agent.policy_net.parameters(), 100)
+                            if agent.steps_done % 10 == 0:
+                                agent.target_net.load_state_dict(agent.policy_net.state_dict())
+                            agent.optimizer.step()
 
                             pass
-                            # hist = model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=1, verbose=0)
+                            # this step should be hist = model.fit(X_train, y_train, batch_size=batch_size,
+                            # nb_epoch=1, verbose=0) in the codebase
+                            # https://github.com/imatge-upc/detection-2016-nipsws/blob/master/scripts
+                            # /pool45_crops_training.py#L217
                         input = new_input
                         old_bbox = new_bbox
 
                         # Soft update of the target network's weights
                         # θ′ ← τ θ + (1 −τ )θ′
-                        target_net_state_dict = net.target_net.state_dict()
-                        policy_net_state_dict = net.policy_net.state_dict()
+                        target_net_state_dict = agent.target_net.state_dict()
+                        policy_net_state_dict = agent.policy_net.state_dict()
                         for key in policy_net_state_dict:
                             target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[
                                 key] * (1 - TAU)
-                        net.target_net.load_state_dict(target_net_state_dict)
+                        agent.target_net.load_state_dict(target_net_state_dict)
 
-                    net.optimizer.zero_grad()
+                    # try:
+                    #     print(str(loss.item()))
+                    # except:
+                    #     pass
+                    agent.optimizer.zero_grad()
 
                 pass
-                print("Saving epoch model")
-                try:
-                    path = os.path.normpath(
-                        os.path.join(save_path, "diff_clip_epoch_" + str(epoch) + "|" + str(loss.item())))
-                    with open(path, 'wb') as f:
-                        pickle.dump(net, f)
-                        print("Model saved as: " + path)
-                except NameError:
-                    pass
+            print("Saving epoch model")
+            try:
+                path = os.path.normpath(
+                    os.path.join(save_path, "rl_clip_epoch_" + str(epoch) + "|" + str(loss.item())))
+                with open(path, 'wb') as f:
+                    pickle.dump(agent, f)
+                    print("Model saved as: " + path)
+            except NameError:
+                pass
 
         print("Saving best model")
         files = os.listdir(save_path)
@@ -399,35 +452,58 @@ if __name__ == "__main__":
         print(s + " has been saved as " + d)
 
     else:
-        red_test_ds, _ = random_split(train_ds, [int(keep * len(train_ds)), len(train_ds) - int(keep * len(train_ds))])
+        red_test_ds, _ = random_split(red_dataset, [int(len(red_dataset)), len(red_dataset) - int(len(red_dataset))])
         test_loader = torch.utils.data.DataLoader(red_test_ds, batch_size=batch_size, shuffle=True,
                                                   collate_fn=lambda x: x)
         print("Instantiating model")
         model_path = os.path.normpath(os.path.join(save_path, 'best_model.pickle'))
         with open(model_path, 'rb') as f:
-            net = pickle.load(f)
-        net.batches = len(test_loader)
+            agent = pickle.load(f)
+        agent.batches = len(test_loader)
         device = 'cuda'
         average_iou = 0
         iou = 0
         counter = 0
-        true_bboxes = []
+        avg_iou = 0.
+        cum_iou = 0.
+        j = 0
         for step, batch in tqdm(enumerate(test_loader)):
-            print("Extracting batch tensors", flush=True)
-            batch_elements = []
-            for el in batch:
-                for sentence in el['sentences']:
-                    batch_elements.append(net.encoder(el['img'], sentence, None))
-                    true_bboxes.append(el['bbox'])
 
-            batch = torch.stack(batch_elements)
-            print("Starting batch inference (t = " + str(net.time) + ")", flush=True)
-            samples = net.sample(batch, image_size=40, batch_size=len(batch), channels=1)
-            for i, sample in enumerate(samples):
-                counter += 1
-                predicted_bb = net.normalize_bbox(sample[0, 25:26, 24:28], reverse=True)
-                true_bb = true_bboxes[i]
-                iou += IoU(true_bb, predicted_bb)
-                average_iou = iou / counter
-                pass
-            print("Average IoU: ", average_iou)
+
+            images = []
+            gt_bboxes = []
+            initial_bboxes = []
+            sentences = []
+            for element in batch:
+                for sentence in element['sentences']:
+                    images.append(element['img'])
+                    gt_bboxes.append(element['bbox'])
+                    initial_bboxes.append([0,0,element['img'].width, element['img'].height])# get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
+                    sentences.append(sentence)
+            print("Predicting batch")
+            for i, image in enumerate(images):
+                # 10 step prediction
+                step = 0
+                status = True  # the agent hasn't finished
+                ground_truth = gt_bboxes[i]
+
+                new_bbox = initial_bboxes[i]
+                while step < 10 and status:
+                    step += 1
+                    try:
+                        embedding = agent.encoder(image.crop(new_bbox), sentences[i])
+                    except ZeroDivisionError:
+                        print(action)
+                        print(new_bbox)
+                        break
+                    input = agent.get_state(clip_embedding=embedding).squeeze()
+                    q = agent.policy_net.forward(input)
+                    action = agent.possible_actions[torch.argmax(q)]
+                    new_bbox, status = agent.actions[action](new_bbox, agent.alpha)
+
+                iou = IoU(true_bbox=ground_truth, predicted_bbox=new_bbox)
+                j += 1
+                cum_iou += iou
+            avg_iou = cum_iou / j
+            print("Average IoU: " + str(avg_iou))
+
