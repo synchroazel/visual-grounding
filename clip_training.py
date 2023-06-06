@@ -3,14 +3,12 @@ import os.path
 import pickle
 
 import clip
-import numpy as np
 from PIL import Image
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from modules.clip_classes import CustomCLIP
-from modules.refcocog import RefCOCOg, RefCOCOgSample
+from modules.refcocog import RefCOCOg
 from modules.utilities import *
 
 if torch.cuda.is_available():
@@ -500,7 +498,7 @@ match case:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        from modules.yoloclip import YoloClip
+        from modules.pipelines.yoloclip import YoloClip
 
         yoloclip = YoloClip(device=device, categories=dataset.dataset.categories)
 
@@ -520,7 +518,7 @@ match case:
         with open(fp, 'rb') as f:
             clip_model = pickle.load(f)
 
-        from modules.yoloclip import YoloClip
+        from modules.pipelines.yoloclip import YoloClip
 
         yoloclip = YoloClip(device=device, categories=dataset.dataset.categories)
         yoloclip.clip_model = clip_model
@@ -540,7 +538,7 @@ match case:
         with open(fp, 'rb') as f:
             clip_model = pickle.load(f)
 
-        from modules.yoloclip import YoloClip
+        from modules.pipelines.yoloclip import YoloClip
 
         yoloclip = YoloClip(device=device, categories=dataset.dataset.categories)
         yoloclip.clip_model = clip_model

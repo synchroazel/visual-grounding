@@ -1,30 +1,22 @@
 # Algorithm 1 DiffusionDet Training
+import math
 import os.path
 import pickle
 import shutil
-from inspect import isfunction
-
-import numpy as np
-import torch
-from clip import clip
-from torch import nn
-from torch.utils.data import random_split
-import math
-from inspect import isfunction
 from functools import partial
+from inspect import isfunction
 
-import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+import torch
+import torch.nn.functional as F
+from clip import clip
 from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
-
-import torch
 from torch import nn, einsum
-import torch.nn.functional as F
+from torch.utils.data import random_split
 from tqdm import tqdm
-import torchvision.transforms as transforms
-from utilities import resize_bbox
-from refcocog import RefCOCOgSample, RefCOCOg
+from tqdm.auto import tqdm
+
+from refcocog import RefCOCOg
 
 
 # Layers strucure taken from:
@@ -413,8 +405,8 @@ class DiffClip(nn.Module):
         self.posterior_variance = self.betas * (1. - self.alphas_cumprod_prev) / (1. - alphas_cumprod)
 
         self.optimizer = torch.optim.Adam(self.unet.parameters(), lr=1e-3)
-        self.bbox_mean = torch.tensor((0,0,0,0)).to(device)
-        self.bbox_std = torch.tensor((1,1,1,1)).to(device)
+        self.bbox_mean = torch.tensor((0, 0, 0, 0)).to(device)
+        self.bbox_std = torch.tensor((1, 1, 1, 1)).to(device)
 
     def extract(self, a, t, x_shape):
         batch_size = t.shape[0]
@@ -430,7 +422,7 @@ class DiffClip(nn.Module):
 
             return bbox
         else:
-            bbox = bbox *  self.bbox_std + self.bbox_mean
+            bbox = bbox * self.bbox_std + self.bbox_mean
 
             return bbox.tolist()[0]
 
@@ -541,6 +533,7 @@ class DiffClip(nn.Module):
 
 if __name__ == "__main__":
     from utilities import IoU
+
     print("Loading dataset")
     data_path = "/media/dmmp/vid+backup/Data/refcocog"
     # data_path = "dataset/refcocog"
@@ -574,7 +567,6 @@ if __name__ == "__main__":
         net.bbox_mean = torch.mean(bboxes, dim=0).to(net.device)
         net.bbox_std = torch.std(bboxes, dim=0).to(net.device)
         del bboxes
-
 
         device = 'cuda'
         epochs = 30
@@ -648,11 +640,10 @@ if __name__ == "__main__":
             print("Starting batch inference (t = " + str(net.time) + ")", flush=True)
             samples = net.sample(batch, image_size=40, batch_size=len(batch), channels=1)
             for i, sample in enumerate(samples):
-                counter +=1
+                counter += 1
                 predicted_bb = net.normalize_bbox(sample[0, 25:26, 24:28], reverse=True)
                 true_bb = true_bboxes[i]
                 iou += IoU(true_bb, predicted_bb)
                 average_iou = iou / counter
                 pass
             print("Average IoU: ", average_iou)
-

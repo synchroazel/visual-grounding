@@ -6,7 +6,7 @@ import torch
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from refcocog import RefCOCOgSample
+from modules.refcocog import RefCOCOgSample
 
 OPTIMIZERS_TO_TRY = {
     "SGD": torch.optim.SGD,
@@ -14,27 +14,30 @@ OPTIMIZERS_TO_TRY = {
     "Adam": torch.optim.Adam,
     "Adamax": torch.optim.Adamax,
     "Adadelta": torch.optim.Adadelta,
-    # todo: add more
+    # TODO: add more
 }
 
+
 def IoU(true_bbox, predicted_bbox):
-    # determine the (x, y)-coordinates of the intersection rectangle
+    # Determine the (x, y)-coordinates of the intersection rectangle
     xA = max(true_bbox[0], predicted_bbox[0])
     yA = max(true_bbox[1], predicted_bbox[1])
     xB = min(true_bbox[2], predicted_bbox[2])
     yB = min(true_bbox[3], predicted_bbox[3])
-    # compute the area of intersection rectangle
+
+    # Compute the area of intersection rectangle
     interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-    # compute the area of both the prediction and ground-truth
-    # rectangles
+
+    # Compute the area of both the prediction and ground-truth rectangles
     true_bboxArea = (true_bbox[2] - true_bbox[0] + 1) * (true_bbox[3] - true_bbox[1] + 1)
     predicted_bboxArea = (predicted_bbox[2] - predicted_bbox[0] + 1) * (predicted_bbox[3] - predicted_bbox[1] + 1)
-    # compute the intersection over union by taking the intersection
-    # area and dividing it by the sum of prediction + ground-truth
-    # areas - the interesection area
+
+    # Compute the intersection over union by taking the intersection area
+    # and dividing it by the sum of prediction + ground-truth areas - the interesection area
     iou = interArea / float(true_bboxArea + predicted_bboxArea - interArea)
-    # return the intersection over union value
+
     return iou
+
 
 def get_best_device():
     if torch.cuda.is_available():
@@ -196,6 +199,8 @@ def find_best_bbox(heatmap, lower_bound=-1.0, upper_bound=1.0):
                         best_score = score
                         best_box = (i, j, w, h)
 
+    best_box = [best_box[0], best_box[1], best_box[2] + best_box[0], best_box[3] + best_box[1]]
+
     return best_box
 
 
@@ -229,6 +234,7 @@ def resize_bbox(bbox, in_size, out_size):
     bbox[:, 3] = x_scale * bbox[:, 3]
     return bbox
 
+
 def visual_grounding_test(vg_pipeline, dataset, logging=False):
     scores = list()
 
@@ -245,8 +251,6 @@ def visual_grounding_test(vg_pipeline, dataset, logging=False):
             scores.append(sc)
 
             avg_metrics = list()
-
-            # The bar description is live updated with the average score for each metric
 
             for metric in scores[0].keys():
                 avg_metric = np.mean([score[metric] for score in scores if score[metric] is not np.nan])

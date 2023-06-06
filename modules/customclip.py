@@ -9,11 +9,11 @@ class CustomCLIP(torch.nn.Module):
         super().__init__()
         model, _ = clip.load("RN50")
 
-        # take the visual encoder of CLIP
-        # we also convert it to be 32 bit (by default CLIP is 16)
+        # Take the visual encoder of CLIP
+        # We also convert it to be 32 bit (by default CLIP is 16)
         self.encoder = model.visual.float()
 
-        # add a linear layer
+        # Add a linear layer
         self.classifier = torch.nn.Linear(1024, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -21,4 +21,3 @@ class CustomCLIP(torch.nn.Module):
         x = self.classifier(x)
 
         return x
-

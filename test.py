@@ -4,17 +4,15 @@ import argparse
 
 from torch.utils.data import random_split
 
-from modules.clipseg import ClipSeg
+from modules.pipelines.clipseg import ClipSeg
+from modules.pipelines.clipssd import ClipSSD
+from modules.pipelines.detrclip import DetrClip
+from modules.pipelines.mdetr import MDETRvg
 from modules.refcocog import RefCOCOg
 from modules.utilities import visual_grounding_test, get_best_device
-from modules.yoloclip import YoloClip
+from modules.pipelines.yoloclip import YoloClip
 
-hp_presets = {
-    "yoloclip": {'yolo_ver': 'yolov8x'},
-    "clipseg": {'method': "w", 'n_segments': (4, 8, 16, 32), 'q': 0.75}
-}
-
-supported_pipelines = ["yoloclip", "clipseg"]
+supported_pipelines = ["yoloclip", "clipseg", "detrclip", "clipssd", "mdetr"]
 
 
 def main(args):
@@ -35,31 +33,56 @@ def main(args):
     print(f"[INFO] Dataset Size: {len(dataset)}")
     print(f"[INFO] test split:   {len(test_ds)}")
 
+    if args.clip_version is None:
+        args.clip_version = "RN50"
+        print(f"[INFO] No CLIP version specified. Using {args.clip_version}")
+
     if args.pipeline == "yoloclip":
 
-        if args.use_preset:
-            pipeline = YoloClip(dataset.categories, **hp_presets["yoloclip"], quiet=True, device=device)
+        if args.yolo_version is None:
+            args.yolo_version = "yolov8x"
+            print(f"[INFO] No YOLO version specified. Using {args.yolo_version}")
 
-        else:
-            pipeline = YoloClip(dataset.categories,
-                                yolo_ver=args.yolo_version,
-                                quiet=True,
-                                device=device)
+        pipeline = YoloClip(dataset.categories,
+                            clip_ver=args.clip_version,
+                            yolo_ver=args.yolo_version,
+                            device=device)
 
     if args.pipeline == "clipseg":
 
-        if args.use_preset:
-            pipeline = ClipSeg(dataset.categories, **hp_presets["clipseg"], quiet=True, device=device)
+        if args.seg_method is None or args.n_segments is None or args.threshold is None:
+            raise ValueError(f"Pipeline `{args.pipeline}` need the following arguments:"
+                             f"`seg_method`, `n_segments` and `threshold`.")
 
-        else:
-            pipeline = ClipSeg(dataset.categories,
-                               method=args.seg_method,
-                               n_segments=args.n_segments,
-                               q=args.threshold,
-                               quiet=True,
-                               device=device)
+        pipeline = ClipSeg(dataset.categories,
+                           clip_ver=args.clip_version,
+                           method=args.seg_method,
+                           n_segments=args.n_segments,
+                           q=args.threshold,
+                           device=device)
 
-    print(f"[INFO] Starting testing\n")
+    if args.pipeline == "detrclip":
+        pipeline = DetrClip(dataset.categories,
+                            clip_ver=args.clip_version,
+                            device=device)
+
+    if args.pipeline == "clipssd":
+
+        if args.confidence_t is None:
+            raise ValueError(f"Pipeline `{args.pipeline}` need the following arguments:"
+                             f"`confidence_t`.")
+
+        pipeline = ClipSSD(dataset.categories,
+                           clip_ver=args.clip_version,
+                           confidence_t=args.confidence_t,
+                           device=device)
+
+    if args.pipeline == "mdetr":
+        pipeline = MDETRvg(dataset.categories,
+                           clip_ver=args.clip_version,
+                           device=device)
+
+    print(f"[INFO] Starting test\n")
 
     visual_grounding_test(pipeline, test_ds, logging=args.logging)
 
@@ -76,8 +99,8 @@ if __name__ == '__main__':
                         help='Whether to log the results or not.')
     parser.add_argument('-rd', '--red_dataset', type=float, default=None,
                         help='Whether to use a reduced version of the dataset or not')
-    parser.add_argument('-up', '--use_preset', action='store_true',
-                        help='Whether to use a preset of hyperparameters for the chosen pipeline or not.')
+    parser.add_argument('-cv', '--clip_version', type=str,
+                        help='CLIP version to use (ViT-B/32, RN50, RN101, RN50x4)')
     parser.add_argument('-yv', '--yolo_version', type=str,
                         help='Yolo version to use (yolov5s, yolov8x). [only for yoloclip]')
     parser.add_argument('-sm', '--seg_method', type=str,
@@ -88,6 +111,8 @@ if __name__ == '__main__':
                         help='Threshold for filtering CLIP heatmap [only for segclip].')
     parser.add_argument('-ds', '--downsampling', type=int,
                         help='Heatmap downsampling factor [only for clipseg].')
+    parser.add_argument('-ct', '--confidence_t', type=float,
+                        help='Confidence t for Single Shot Detection [only for clipssd].')
 
     args = parser.parse_args()
 

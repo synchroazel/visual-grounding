@@ -75,8 +75,6 @@ def training_step(net, clip_prep_, data_loader, optimizer, cost_function, device
     return cumulative_loss / n_samples, cumulative_accuracy / n_samples * 100
 
 
-
-
 def test_step(net, clip_prep_, data_loader, cost_function, device):
     samples_ = 0.0
     cumulative_loss = 0.0
@@ -383,6 +381,14 @@ def main(args):
 
     clip_model, clip_prep = clip.load("RN50", device=device)
 
+    print("[INFO] Hyperparameters:")
+    print("[INFO]   batch size = ", args.batch_size)
+    print("[INFO]   epochs = ", args.epochs)
+    print("[INFO]   learning rate = ", args.learning_rate)
+    print("[INFO]   weight decay = ", args.weight_decay)
+    print("[INFO]   momentum = ", args.momentum)
+    print("[INFO]   optimizer = ", args.optimizer)
+
     if args.contrastive:
         print("[INFO] CLIP will be fine-tuned using Contrastive Learning on all RefCOCOg samples.")
 
@@ -438,7 +444,7 @@ if __name__ == '__main__':
                         help='Whether to use a reduced version of the dataset or not')
     parser.add_argument('-e', '--epochs', type=int, default=10,
                         help='Number of epochs to train the model for')
-    parser.add_argument('-bs', '--batch_size', type=int, default=256,
+    parser.add_argument('-bs', '--batch_size', type=int, default=128,
                         help='Batch size to use during training')
     parser.add_argument('-lr', '--learning_rate', type=float, default=1e-4,
                         help='Learning rate to use during training')

@@ -78,7 +78,6 @@ class RefCOCOg(Dataset):
 
         self.size = len(self.refs)
 
-
     def __getitem__(self, idx: int):
 
         refs_data = self.refs[idx]
@@ -92,7 +91,6 @@ class RefCOCOg(Dataset):
             self.ds_path,
             "images",
             re.sub(r"_[0-9]+\.jpg", ".jpg", refs_data["file_name"])
-            # "_".join(ann_data["file_name"].split("_")[:-1])+".jpg"
         )
 
         pil_img = Image.open(image_path)
