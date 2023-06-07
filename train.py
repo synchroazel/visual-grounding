@@ -55,7 +55,6 @@ def training_step(net, clip_prep_, data_loader, optimizer, cost_function, device
         # Loss computation
         loss = cost_function(outputs, targets)
 
-        # Backward pass
         loss.backward()
 
         # Parameters update
@@ -135,7 +134,7 @@ def contrastive_loss(image_logits, text_logits, cost_function, device):
     return (loss_i + loss_t) / 2.0
 
 
-def contrastive_training_step(net, clip_prep_, data_loader, cost_function, device):
+def contrastive_training_step(net, clip_prep_, data_loader, optimizer, cost_function, device):
     n_samples = 0.0
     cumulative_loss = 0.0
 
@@ -168,13 +167,14 @@ def contrastive_training_step(net, clip_prep_, data_loader, cost_function, devic
             image_logits, text_logits = net(images, texts)
 
             # loss computation
-            loss = contrastive_loss(image_logits, text_logits, cost_function)
+            loss = contrastive_loss(image_logits, text_logits, cost_function, device=device)
 
             # fetch loss value
             n_samples += images.shape[0]
             cumulative_loss += loss.item()
 
-    return cumulative_loss / n_samples
+    return cumulative_loss / n_samples, 0
+
 
 
 def contrastive_test_step(net, clip_prep_, data_loader, cost_function, device):
@@ -210,13 +210,13 @@ def contrastive_test_step(net, clip_prep_, data_loader, cost_function, device):
             image_logits, text_logits = net(images, texts)
 
             # loss computation
-            loss = contrastive_loss(image_logits, text_logits, cost_function)
+            loss = contrastive_loss(image_logits, text_logits, cost_function, device=device)
 
             # fetch loss value
             n_samples += images.shape[0]
             cumulative_loss += loss.item()
 
-    return cumulative_loss / n_samples
+    return cumulative_loss / n_samples, 0
 
 
 """ main (common) training logic """
@@ -249,7 +249,10 @@ def training_loop(model,
     net = model.to(device)
 
     # Instantiate the optimizer
-    optimizer = get_optimizer(net.classifier, learning_rate, weight_decay, momentum, optimizer)
+    if exp_name == "clip_contrastive":
+        optimizer = get_optimizer(net, learning_rate, weight_decay, momentum, optimizer)
+    else:
+        optimizer = get_optimizer(net.classifier, learning_rate, weight_decay, momentum, optimizer)
 
     # Define the cost function
     cost_function = get_cost_function()
@@ -272,13 +275,13 @@ def training_loop(model,
 
     # For each epoch, train the network and then compute evaluation results
     for e in range(epochs):
+        print('[INFO] EPOCH: {:d}'.format(e + 1))
         train_loss, train_accuracy = training_step_fun(net, clip_prep_, train_loader, optimizer, cost_function, device)
         val_loss, val_accuracy = test_step_fun(net, clip_prep_, val_loader, cost_function, device)
 
         # Logs to TensorBoard
         log_values(writer, e, "validation", val_loss, val_accuracy)
 
-        print('[INFO] EPOCH: {:d}'.format(e + 1))
         print('\tTraining loss {:.5f}, Training accuracy {:.2f}'.format(train_loss, train_accuracy))
         print('\tValidation loss {:.5f}, Validation accuracy {:.2f}'.format(val_loss, val_accuracy))
         print('-----------------------------------------------------')
@@ -411,7 +414,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # todo: remove
-    args.simple = True
+    args.contrastive = True
     args.datapath = "/media/dmmp/vid+backup/Data/refcocog"
     args.batch_size = 128
 
