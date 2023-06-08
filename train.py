@@ -51,9 +51,6 @@ def main(args):
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
-    def log_values(writer, step, prefix, loss):
-        writer.add_scalar(f"{prefix}/loss", loss, step)
-
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
 
@@ -75,6 +72,7 @@ def main(args):
             else:
                 pbar.set_description("[INFO] Loss %.4f" % loss)
                 loss.backward()
+                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=1.0)
                 optimizer.step()
 
         # Closes the logger
