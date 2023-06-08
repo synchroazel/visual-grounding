@@ -76,7 +76,7 @@ for n in range(epochs):
     for batch in pbar:
         image, text = batch
 
-        image_embeddings, text_embeddings = model(image, text)
+        image_embeddings, text_embeddings = model(image.to(device), text.to(device))
 
         loss = contrastive_loss(image_embeddings.float(), text_embeddings.float())
 
