@@ -75,11 +75,10 @@ for n in range(epochs):
 
     for batch in pbar:
         image, text = batch
-        # image, text = clip_transform(image, text)
 
-        image_embeddings, text_embeddings = model(image.to(device), text.to(device))
+        image_embeddings, text_embeddings = model(image, text)
 
-        loss = contrastive_loss(image_embeddings, text_embeddings)
+        loss = contrastive_loss(image_embeddings.float(), text_embeddings.float())
 
         if torch.isnan(loss):
             print(f"[INFO] NaN Loss. Skipping...")
