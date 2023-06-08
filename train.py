@@ -1,5 +1,4 @@
 import clip
-import numpy as np
 import torch
 from torchmultimodal.modules.losses.contrastive_loss_with_temperature import ContrastiveLossWithTemperature
 from torchmultimodal.transforms.clip_transform import CLIPTransform, CLIPImageTransform, CLIPTextTransform
@@ -10,9 +9,11 @@ from modules.refcocog import RefCOCOgSample
 from modules.utilities import get_best_device
 
 epochs = 10
-batch_size = 64
+batch_size = 16
 
 data_path = "dataset/refcocog"  # CHANGE ME
+
+clip_ver = "RN50"
 
 dataset = RefCOCOg(ds_path=data_path, transform_img=CLIPImageTransform(), transform_txt=CLIPTextTransform())
 
@@ -54,13 +55,12 @@ clip_transform = CLIPTransform()
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
 # instantiate model. Here we use clip with vit-L as the image encoder
-model, _ = clip.load("ViT-L/14", device=device)
+model, _ = clip.load(clip_ver, device=device)
 
-model = model.float()
+model.float()
 
 # define loss and other things needed for training
 contrastive_loss = ContrastiveLossWithTemperature()
-optim = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
 # define optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
@@ -69,6 +69,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 
 for n in range(epochs):
     print(f"[INFO] Epoch #{n}")
+
     epoch_losses = list()
 
     pbar = tqdm(dataloader, desc="[INFO] Loss N/A", leave=True)
@@ -80,10 +81,18 @@ for n in range(epochs):
         image_embeddings, text_embeddings = model(image.to(device), text.to(device))
 
         loss = contrastive_loss(image_embeddings, text_embeddings)
-        epoch_losses.append(loss.item())
 
-        avg_loss = np.mean(epoch_losses)
-        pbar.set_description("[INFO] Loss %.4f" % avg_loss)
+        if torch.isnan(loss):
+            print(f"[INFO] NaN Loss. Skipping...")
+            continue
+        else:
+            epoch_losses.append(loss.item())
 
-        loss.backward()
-        optimizer.step()
+            avg_loss = torch.mean(torch.tensor(epoch_losses)).cpu().item()
+            pbar.set_description("[INFO] Loss %.4f" % avg_loss)
+
+            loss.backward()
+            optimizer.step()
+
+    # save model
+    torch.save(model.state_dict(), f"ft_clip-{clip_ver}.pth")
