@@ -2,15 +2,16 @@
 
 import argparse
 
+import torch
 from torch.utils.data import random_split
 
 from modules.pipelines.clipseg import ClipSeg
 from modules.pipelines.clipssd import ClipSSD
 from modules.pipelines.detrclip import DetrClip
 from modules.pipelines.mdetr import MDETRvg
+from modules.pipelines.yoloclip import YoloClip
 from modules.refcocog import RefCOCOg
 from modules.utilities import visual_grounding_test, get_best_device
-from modules.pipelines.yoloclip import YoloClip
 
 supported_pipelines = ["yoloclip", "clipseg", "detrclip", "clipssd", "mdetr"]
 
@@ -91,6 +92,10 @@ def main(args):
                            clip_ver=args.clip_version,
                            device=device)
 
+    if args.clip_pth is not None:
+        pipeline.clip_model.load_state_dict(torch.load(args.clip_pth, map_location=device))
+        print(f"[INFO] Fine-tuned CLIP model loaded from {args.clip_pth}.")
+
     print(f"[INFO] Starting test\n")
 
     visual_grounding_test(pipeline, test_ds, logging=args.logging)
@@ -122,6 +127,8 @@ if __name__ == '__main__':
                         help='Heatmap downsampling factor [only for clipseg].')
     parser.add_argument('-ct', '--confidence_t', type=float,
                         help='Confidence t for Single Shot Detection [only for clipssd].')
+    parser.add_argument('-cp', '--clip_pth', type=str,
+                        help='Path to a fine-tuned CLIP model state-dict.')
 
     args = parser.parse_args()
 

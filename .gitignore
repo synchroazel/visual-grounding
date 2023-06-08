@@ -8,3 +8,4 @@ runs/
 yolov5/
 *.pickle
 *.json
+*.pth
