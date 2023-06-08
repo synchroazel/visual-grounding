@@ -185,7 +185,10 @@ class ClipSeg(VisualGroundingPipeline):
 
         # Crop around the best bbox and encode
         pred_image = img.crop(pred_bbox)
-        pred_image_enc = self._encode_img(pred_image)
+        try:
+            pred_image_enc = self._encode_img(pred_image)
+        except ZeroDivisionError:  # If the detected image area is too small, return NaN
+            return {"IoU": 0, "cosine": np.nan, "euclidean": np.nan, "dotproduct": np.nan, "grounding": np.nan}
 
         # Get ground truth bbox
         gt_bbox = img_sample.bbox

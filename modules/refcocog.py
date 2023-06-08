@@ -18,7 +18,6 @@ class RefCOCOgSample:
 
     def __init__(self,
                  img: Image.Image,
-                 shape: tuple[int, int],
                  path: str,
                  img_id: str,
                  split: str,
@@ -28,7 +27,6 @@ class RefCOCOgSample:
                  bbox: list[float],
                  segmentation: list[float]):
         self.img = img
-        self.shape = shape
         self.path = path
         self.id = img_id
         self.split = split
@@ -48,10 +46,11 @@ class RefCOCOg(Dataset):
 
     """
 
-    def __init__(self, ds_path: str, split=None, transform=None):
+    def __init__(self, ds_path: str, split=None, transform_img=None, transform_txt=None):
         super(RefCOCOg, self).__init__()
 
-        self.transform = transform
+        self.transform_img = transform_img
+        self.transform_txt = transform_txt
 
         self.ds_path = ds_path
 
@@ -69,6 +68,8 @@ class RefCOCOg(Dataset):
             for item in self.instances['categories']
         }
 
+        self.instances = {inst['id']: inst for inst in self.instances['annotations']}
+
         if split == 'train':
             self.refs = [ref for ref in self.refs if ref['split'] == 'train']
         elif split == 'val':
@@ -80,39 +81,46 @@ class RefCOCOg(Dataset):
 
     def __getitem__(self, idx: int):
 
+        # Get referenced data
         refs_data = self.refs[idx]
 
-        for inst in self.instances['annotations']:
-            if inst['id'] == refs_data['ann_id']:
-                ann_data = inst
-                break
+        # Get annotation data
+        ann_data = self.instances[refs_data['ann_id']]
 
+        # Get the image file path
         image_path = os.path.join(
             self.ds_path,
             "images",
             re.sub(r"_[0-9]+\.jpg", ".jpg", refs_data["file_name"])
         )
 
+        # Load the image as a PIL image
         pil_img = Image.open(image_path)
+
+        # Get the sentences from refs data
+        sentences = [sentence["raw"].lower() for sentence in refs_data["sentences"]]
+
+        # Apply transforms (if any) to the image and sentences
+        if self.transform_img:
+            pil_img = self.transform_img(pil_img)
+
+        if self.transform_txt:
+            sentences = [self.transform_txt(sentence) for sentence in sentences]
 
         bbox = torch.tensor(ann_data["bbox"])
         bbox = box_convert(bbox, "xywh", "xyxy").numpy()
 
         sample = {
             "img": pil_img,
-            "shape": transforms.ToTensor()(pil_img).shape,
             "path": image_path,
             "img_id": refs_data["image_id"],
             "split": refs_data["split"],
             "category": self.categories[refs_data["category_id"]]["category"],
             "category_id": refs_data["category_id"],
-            "sentences": [sentence["raw"].lower() for sentence in refs_data["sentences"]],
+            "sentences": sentences,
             "bbox": bbox,
             "segmentation": ann_data["segmentation"]
         }
-
-        if self.transform:
-            sample = self.transform(sample["img"], dtype=torch.float32)
 
         return sample
 
