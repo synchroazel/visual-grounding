@@ -10,6 +10,7 @@ from modules.utilities import get_best_device
 
 epochs = 10
 batch_size = 16
+learning_rate = 1e-5
 
 data_path = "dataset/refcocog"  # CHANGE ME
 
@@ -63,14 +64,12 @@ model.float()
 contrastive_loss = ContrastiveLossWithTemperature()
 
 # define optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 # write your train loop
 
 for n in range(epochs):
     print(f"[INFO] Epoch #{n}")
-
-    epoch_losses = list()
 
     pbar = tqdm(dataloader, desc="[INFO] Loss N/A", leave=True)
 
@@ -86,11 +85,7 @@ for n in range(epochs):
             print(f"[INFO] NaN Loss. Skipping...")
             continue
         else:
-            epoch_losses.append(loss.item())
-
-            avg_loss = torch.mean(torch.tensor(epoch_losses)).cpu().item()
-            pbar.set_description("[INFO] Loss %.4f" % avg_loss)
-
+            pbar.set_description("[INFO] Loss %.4f" % loss)
             loss.backward()
             optimizer.step()
 
