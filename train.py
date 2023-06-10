@@ -35,6 +35,10 @@ def main(args):
 
         return torch.stack(images), torch.stack(texts)
 
+    def convert_models_to_fp32(model):
+        for p in model.parameters():
+            p.data = p.data.float()
+            p.grad.data = p.grad.data.float()
 
     # Instantiate the dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
@@ -43,13 +47,10 @@ def main(args):
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
 
     # Set model precision according to device
-    if device == torch.device("cuda"):
-        clip_model.double()
-
-    # if device == torch.device("cpu") or torch.device("mps"):
-    #     clip_model.float()
-    # else:
-    #     clip.model.convert_weights(clip_model)
+    if device == torch.device("cpu") or torch.device("mps"):
+        clip_model.float()
+    else:
+        clip.model.convert_weights(clip_model)
 
     # Define loss function
     contrastive_loss = ContrastiveLossWithTemperature()
@@ -76,10 +77,6 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-            if device == torch.device("cuda"):
-                image = image.double()
-                text = text.double()
-
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
             # print(f"[INFO] image_embeddings have {image_embeddings.dtype} precision")
@@ -97,18 +94,16 @@ def main(args):
 
             loss.backward()
 
-            if args.weight_clipping:
-                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
-            optimizer.step()
-
-            # if device == torch.device("cpu") or torch.device("mps"):
-            #     optimizer.step()
-            # else:
-            #     convert_models_to_fp32(clip_model)
-            #     optimizer.step()
-            #     clip.model.convert_weights(clip_model)
-
-            # optimizer.step()
+            if device == torch.device("cpu") or torch.device("mps"):
+                if args.weight_clipping:
+                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+                optimizer.step()
+            else:
+                convert_models_to_fp32(clip_model)
+                if args.weight_clipping:
+                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+                optimizer.step()
+                clip.model.convert_weights(clip_model)
 
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
@@ -121,9 +116,6 @@ def main(args):
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': torch.mean(torch.tensor(epoch_losses)),
         }, f"ft_clip-{args.clip_version.replace('/', '-')}.pth")
-
-        # model_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
-        # torch.save(clip_model.state_dict(), model_name)
 
     # Closes the logger
     writer.close()
