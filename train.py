@@ -17,7 +17,7 @@ def main(args):
     device = get_best_device()
 
     # Load the (full) dataset
-    dataset = RefCOCOg(ds_path=args.datapath, split="train",
+    dataset = RefCOCOg(ds_path=args.datapath, split="test",
                        transform_img=CLIPImageTransform(),
                        transform_txt=CLIPTextTransform())
 
