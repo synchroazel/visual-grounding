@@ -55,6 +55,8 @@ def main(args):
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
+    epoch_losses = list()
+
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
 
@@ -73,8 +75,7 @@ def main(args):
 
             loss = contrastive_loss(image_embeddings, text_embeddings)
 
-            # Log to tensorboard
-            writer.add_scalar(f"loss", loss, n)
+            epoch_losses.append(loss)
 
             if torch.isnan(loss):
                 print(f"\n[WARN] NaN Loss! Skipping...\n")
@@ -87,12 +88,15 @@ def main(args):
                     torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
                 optimizer.step()
 
-        # Closes the logger
-        writer.close()
+        # Log to tensorboard
+        writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
 
         # Save the model after each epoch
         model_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
         torch.save(clip_model.state_dict(), model_name)
+
+    # Closes the logger
+    writer.close()
 
 
 if __name__ == '__main__':
