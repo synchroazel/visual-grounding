@@ -76,11 +76,11 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-            image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
-
             if device == torch.device("cuda"):
-                image_embeddings = image_embeddings.double()
-                text_embeddings = text_embeddings.double()
+                image = image.double()
+                text = text.double()
+
+            image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
             # print(f"[INFO] image_embeddings have {image_embeddings.dtype} precision")
             # print(f"[INFO] text_embeddings have {text_embeddings.dtype} precision")
