@@ -42,8 +42,7 @@ def main(args):
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
 
     # Cast the model to float
-    if args.f64:
-        clip_model.float()
+    clip_model.float()
 
     # Define loss function
     contrastive_loss = ContrastiveLossWithTemperature()
@@ -55,10 +54,10 @@ def main(args):
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
-    epoch_losses = list()
-
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
+
+        epoch_losses = list()
 
         optimizer.zero_grad()
 
@@ -67,26 +66,34 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-            image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
+            with torch.autocast(device_type=device, dtype=torch.float16):
 
-            if args.f64:
-                image_embeddings = image_embeddings.float()
-                text_embeddings = text_embeddings.float()
+                image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
-            loss = contrastive_loss(image_embeddings, text_embeddings)
+                # image_embeddings = image_embeddings.float()
+                # text_embeddings = text_embeddings.float()
 
-            epoch_losses.append(loss)
+                assert image_embeddings.dtype == torch.float16
+                assert text_embeddings.dtype == torch.float16
 
-            if torch.isnan(loss):
-                print(f"\n[WARN] NaN Loss! Skipping...\n")
-                continue
-            else:
+                loss = contrastive_loss(image_embeddings, text_embeddings)
+
+                assert loss.dtype == torch.float32
+
+                epoch_losses.append(loss)
+
+                if torch.isnan(loss):
+                    print(f"\n[WARN] NaN Loss! Skipping...\n")
+                    continue
+
                 pbar.set_description("[INFO] Loss %.4f" % loss)
 
-                loss.backward()
-                if args.weight_clipping:
-                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
-                optimizer.step()
+            ### Backprop
+
+            loss.backward()
+            if args.weight_clipping:
+                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+            optimizer.step()
 
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
