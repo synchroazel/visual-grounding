@@ -4,7 +4,7 @@ import clip
 import torch
 from torchvision.ops import box_iou
 
-from modules.utilities import cosine_similarity
+from utilities import cosine_similarity
 
 
 class VisualGroundingPipeline:

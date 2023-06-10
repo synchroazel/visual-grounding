@@ -413,18 +413,18 @@ class DiffClip(nn.Module):
         out = a.gather(-1, t.cpu())
         return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
-    def normalize_bbox(self, bbox, reverse=False) -> tuple:
-        """
-        """
-        bbox = torch.tensor(bbox).to(device)
-        if not reverse:
-            bbox = (bbox - self.bbox_mean) / self.bbox_std
-
-            return bbox
-        else:
-            bbox = bbox * self.bbox_std + self.bbox_mean
-
-            return bbox.tolist()[0]
+    # def normalize_bbox(self, bbox, reverse=False) -> tuple:
+    #     """
+    #     """
+    #     bbox = torch.tensor(bbox).to(device)
+    #     if not reverse:
+    #         bbox = (bbox - self.bbox_mean) / self.bbox_std
+#
+    #         return bbox
+    #     else:
+    #         bbox = bbox * self.bbox_std + self.bbox_mean
+#
+    #         return bbox.tolist()[0]
 
     def _encode_text(self, text):
         text_ = clip.tokenize(text).to(self.device)
@@ -446,7 +446,6 @@ class DiffClip(nn.Module):
             bbox_enc = torch.normal(mean=0, std=1, size=(1, 512 + 64)).to(self.device)
         else:
             bbox_enc = torch.zeros(1, 512 + 64).to(self.device)
-            bbox_enc[0, 0:4] = self.normalize_bbox(bbox)
         encoding = torch.cat((image, text, bbox_enc), 1).reshape(40, 40)
         return encoding
 
@@ -464,10 +463,9 @@ class DiffClip(nn.Module):
 
     def p_losses(self, x_start, t, noise=None, loss_type="l1"):
         if noise is None:
-            noise = torch.zeros((len(x_start), 40, 40)).to(device)
-            # noise[:, 25:26, 24:28] = x_start[:, 25:26, 24:28] + torch.randn_like(x_start[:, 25:26, 24:28]) # noise of bb true
-            # noise[:,26:,28:] += torch.randn_like(x_start[:,26:,28:]) # noise of bb pad
-            noise[:, 25:, 28:] += torch.randn_like(x_start[:, 25:, 28:])  # noise of bb pad
+            # noise = torch.zeros((len(x_start), 40, 40)).to(device)
+            # noise[:, 25:, 28:] += torch.randn_like(x_start[:, 25:, 28:])  # noise of bb pad
+            noise = torch.randn_like(x_start)
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         x_noisy = x_noisy[None, :, :, :].movedim(1, 0)
@@ -503,10 +501,11 @@ class DiffClip(nn.Module):
                 return model_mean
             else:
                 posterior_variance_t = self.extract(self.posterior_variance, t, x.shape)
-                # noise = torch.zeros(3,512).to(self.device)
+
                 noise = torch.zeros((len(x), 40, 40)).to(device)
                 noise = noise[None, :, :, :].movedim(1, 0)
-                noise[:, :, 25:, 28:] += torch.randn_like(x[:, :, 25:, 28:])  # noise of bb pad
+                # noise[:, :, 25:, 28:] += torch.randn_like(x[:, :, 25:, 28:])  # noise of bb pad
+                noise += torch.randn_like(x)
                 # Algorithm 2 line 4:
                 return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -545,7 +544,7 @@ if __name__ == "__main__":
     dataset = RefCOCOg(ds_path=data_path)
     # keep only a toy portion of each split
     batch_size = 256
-    keep = 1
+    keep = 0.1
     train = False
     red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
     if train:
@@ -556,20 +555,8 @@ if __name__ == "__main__":
                                                    collate_fn=lambda x: x)
         net.batches = len(train_loader)
 
-        # calculate bboxes mean and std
-        bboxes = []
-        print("calculating bboxes mean and std")
-        for batch in tqdm(train_loader):
-            for el in batch:
-                bboxes.append(el['bbox'])
-                pass
-        bboxes = torch.tensor(bboxes)
-        net.bbox_mean = torch.mean(bboxes, dim=0).to(net.device)
-        net.bbox_std = torch.std(bboxes, dim=0).to(net.device)
-        del bboxes
-
         device = 'cuda'
-        epochs = 30
+        epochs = 10
         for epoch in tqdm(range(epochs)):
             for step, batch in tqdm(enumerate(train_loader)):
                 print("Extracting batch tensors", flush=True)
@@ -641,7 +628,7 @@ if __name__ == "__main__":
             samples = net.sample(batch, image_size=40, batch_size=len(batch), channels=1)
             for i, sample in enumerate(samples):
                 counter += 1
-                predicted_bb = net.normalize_bbox(sample[0, 25:26, 24:28], reverse=True)
+                predicted_bb = sample[0, 25:26, 24:28]
                 true_bb = true_bboxes[i]
                 iou += IoU(true_bb, predicted_bb)
                 average_iou = iou / counter

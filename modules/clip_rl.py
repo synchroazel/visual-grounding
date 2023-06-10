@@ -1,4 +1,3 @@
-# Algorithm 1 DiffusionDet Training
 import math
 import os
 import pickle
@@ -6,22 +5,19 @@ import random
 import shutil
 
 import PIL.Image
-import matplotlib
-import matplotlib.pyplot as plt
-from collections import namedtuple, deque
-from itertools import count
+from collections import namedtuple
 
-import numpy
 import numpy as np
 from torch.utils.data import random_split
 from tqdm import tqdm
 
-from refcocog import RefCOCOg, RefCOCOgSample
+from refcocog import RefCOCOg
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from clip import clip
+from utilities import cosine_similarity
 
 # strucure taken from: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 # https://arxiv.org/pdf/2208.04511.pdf
@@ -45,8 +41,10 @@ class DQN(nn.Module):
         x = F.leaky_relu(self.layer2(x))
         return self.layer3(x)
 
+
 BBOX_LOW_LIMIT = 0
 BBOX_HIGH_LIMIT = 1000
+
 
 def move_right(bbox, alpha: float) -> tuple:
     Aw = abs(alpha * (bbox[2] - bbox[0]))
@@ -79,7 +77,7 @@ def move_down(bbox, alpha: float) -> tuple:
     Ah = abs(alpha * (bbox[3] - bbox[1]))
 
     down = bbox[3] + Ah if bbox[3] + Ah < BBOX_HIGH_LIMIT else BBOX_HIGH_LIMIT
-    return [bbox[0], bbox[1] + Ah, bbox[2],down], True
+    return [bbox[0], bbox[1] + Ah, bbox[2], down], True
 
 
 def make_bigger(bbox, alpha: float) -> tuple:
@@ -114,15 +112,29 @@ def make_taller(bbox, alpha: float) -> tuple:
 
     return [bbox[0] + Aw, bbox[1], bbox[2] - Aw, bbox[3]], True
 
+
 def stop(bbox, *args):
     return bbox, False
 
-def get_image_center_bb(image_w, image_h):
 
+def get_image_center_bb(image_w, image_h):
     w_quarter = image_w / 4
     h_quarter = image_h / 4
 
-    return [w_quarter,h_quarter,image_w-w_quarter, image_h-h_quarter]
+    return [w_quarter, h_quarter, image_w - w_quarter, image_h - h_quarter]
+
+
+def grounding_accuracy(img_encoding, category_encodings: dict, true_category: str):
+    all_c_sims = dict()
+
+    for category_id in category_encodings.keys():
+        cur_categ_enc = category_encodings[category_id].float()
+
+        all_c_sims[category_id] = cosine_similarity(img_encoding, cur_categ_enc)
+
+    pred_category = max(all_c_sims, key=all_c_sims.get)
+
+    return 1 if pred_category == true_category else 0
 
 
 class RL_Clip(nn.Module):
@@ -149,8 +161,7 @@ class RL_Clip(nn.Module):
                         'bigger': make_bigger,
                         'smaller': make_smaller, 'fatter': make_fatter, 'taller': make_taller, 'trigger': stop}
         self.clip_model, self.clip_prep = clip.load(clip_ver, device=device)
-        self.history_vector = torch.zeros([len(actions) * maximum_past_actions_memory]).to(device)
-        self.IoU_treshold = 0.7
+        self.IoU_treshold = 0.5
         self.trigger_final_reward = 3
         self.maximum_past_actions_memory = maximum_past_actions_memory
         self.past_actions = torch.zeros((1, len(actions) * self.maximum_past_actions_memory)).to(
@@ -158,7 +169,7 @@ class RL_Clip(nn.Module):
         self.lr = 0.001  # learning rate
         self.alpha = 0.3
         self.random_factor = random_factor
-        self.buffer_exparience_replay = 15_000
+        self.buffer_experience_replay = 15_000
         self._memory_update_index = 0
 
         # start the rewards table
@@ -176,17 +187,7 @@ class RL_Clip(nn.Module):
         self.EPS_START = 0.9
         self.EPS_DECAY = 1000
 
-    def init_reward(self, states):
-        for action in states:
-            self.G[action] = np.random.uniform(high=1.0, low=0.1)  # initialize with random values
-
-    def choose_action(self, bbox, ground_truth_bbox)->str:
-        """
-
-        :param bbox:
-        :param ground_truth_bbox:
-        :return:
-        """
+    def choose_action(self, bbox, ground_truth_bbox) -> str:
         next_move = None
         randomN = random.random()
         if randomN < self.random_factor:
@@ -227,7 +228,7 @@ class RL_Clip(nn.Module):
 
     def get_state(self, clip_embedding):
         clip_embedding = clip_embedding.to(self.device)
-        history_vector = torch.reshape(self.history_vector,
+        history_vector = torch.reshape(self.past_actions,
                                        (len(self.possible_actions) * self.maximum_past_actions_memory, 1)).to(
             self.device)
         state = torch.vstack((clip_embedding.T, history_vector))
@@ -247,7 +248,7 @@ class RL_Clip(nn.Module):
         start = self._memory_update_index * len(self.possible_actions)
         end = start + len(self.possible_actions)
         self.past_actions[start:end] = torch.tensor(self.actions_dummies[action]).squeeze()
-        if self._memory_update_index < self.maximum_past_actions_memory-1:
+        if self._memory_update_index < self.maximum_past_actions_memory - 1:
             self._memory_update_index += 1
         else:
             self._memory_update_index = 0
@@ -270,7 +271,7 @@ class RL_Clip(nn.Module):
 if __name__ == "__main__":
     from utilities import IoU
 
-    agent = RL_Clip(maximum_past_actions_memory=0)
+    agent = RL_Clip(maximum_past_actions_memory=10)
     print("Loading dataset")
     data_path = "/media/dmmp/vid+backup/Data/refcocog"
     # data_path = "dataset/refcocog"
@@ -279,29 +280,27 @@ if __name__ == "__main__":
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    dataset = RefCOCOg(ds_path=data_path)
+
     # keep only a toy portion of each split
     batch_size = 128
-    keep = 0.01
-    train = True
+    keep = 1
+    train = False
     maximum_steps = 10
-    red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
+
     if train:
         print("Instantiating model")
-
-        red_train_ds, _ = random_split(red_dataset, [int(len(red_dataset)), len(red_dataset) - int(len(red_dataset))])
-        train_loader = torch.utils.data.DataLoader(red_train_ds, batch_size=batch_size, shuffle=True,
+        dataset = RefCOCOg(ds_path=data_path, split='train')
+        red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
+        train_loader = torch.utils.data.DataLoader(red_dataset, batch_size=batch_size, shuffle=True,
                                                    collate_fn=lambda x: x)
         del _
 
         device = 'cuda'
         epochs = 10
-        epsilon = 0.1
-        alpha = 0.3
-        gamma = 0.9
-        memory_pointer = -1
+        GAMMA = 0.99
         TAU = 0.005
-        BB_LENGTH_LIMIT = 10 # if a BB is smaller than 10x10, the agent is penalized
+        memory_pointer = -1
+        BB_LENGTH_LIMIT = 10  # if a BB is smaller than 10x10, the agent is penalized
         for epoch in tqdm(range(epochs)):
             epsilon = 1
             for step, batch in enumerate(train_loader):
@@ -316,7 +315,8 @@ if __name__ == "__main__":
                     for sentence in element['sentences']:
                         embeddings.append(agent.encoder(element['img'], sentence))
                         gt_bboxes.append(element['bbox'])
-                        initial_bboxes.append([0,0,element['img'].width,element['img'].height])# get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
+                        initial_bboxes.append([0, 0, element['img'].width, element[
+                            'img'].height])  # get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
                         sentences.append(sentence)
                         images.append(element['img'])
                 print("Batch processing")
@@ -352,7 +352,8 @@ if __name__ == "__main__":
                             new_img = image
                             reward = -agent.trigger_final_reward
                         # the image is too small
-                        if ((new_bbox[2] - new_bbox[0]) < BB_LENGTH_LIMIT) or ((new_bbox[3] - new_bbox[1]) < BB_LENGTH_LIMIT):
+                        if ((new_bbox[2] - new_bbox[0]) < BB_LENGTH_LIMIT) or (
+                                (new_bbox[3] - new_bbox[1]) < BB_LENGTH_LIMIT):
                             reward = -agent.trigger_final_reward
                         try:
                             encoding = agent.encoder(new_img, sentences[i])
@@ -361,12 +362,12 @@ if __name__ == "__main__":
                         new_input = agent.get_state(encoding)
 
                         # Experience replay storage
-                        if len(agent.replay) < agent.buffer_exparience_replay:
+                        if len(agent.replay) < agent.buffer_experience_replay:
                             agent.replay.append((input, action, reward, new_input))
                         else:
                             # print("Starting memory replay")
-                            agent.steps_done +=1
-                            memory_pointer = memory_pointer + 1 if memory_pointer < agent.buffer_exparience_replay - 1 else 0
+                            agent.steps_done += 1
+                            memory_pointer = memory_pointer + 1 if memory_pointer < agent.buffer_experience_replay - 1 else 0
                             agent.replay[memory_pointer] = (input, action, reward, new_input)
 
                             transitions = random.sample(agent.replay, batch_size)
@@ -391,7 +392,7 @@ if __name__ == "__main__":
                             next_state_values = torch.zeros(batch_size, device=device)
                             with torch.no_grad():
                                 next_state_values[non_final_mask] = agent.target_net(non_final_next_states).max(1)[0]
-                            expected_state_action_values = (next_state_values * gamma) + reward_batch
+                            expected_state_action_values = (next_state_values * GAMMA) + reward_batch
                             # Compute Huber loss
                             criterion = nn.SmoothL1Loss()
                             loss = criterion(state_action_values, expected_state_action_values)
@@ -401,34 +402,23 @@ if __name__ == "__main__":
                             loss.backward()
                             # In-place gradient clipping
                             torch.nn.utils.clip_grad_value_(agent.policy_net.parameters(), 100)
-                            if agent.steps_done % 10 == 0:
-                                agent.target_net.load_state_dict(agent.policy_net.state_dict())
                             agent.optimizer.step()
+                            if agent.steps_done % 10 == 0:
+                                # Soft update of the target network's weights
+                                # θ′ ← τ θ + (1 −τ )θ′
+                                target_net_state_dict = agent.target_net.state_dict()
+                                policy_net_state_dict = agent.policy_net.state_dict()
+                                for key in policy_net_state_dict:
+                                    target_net_state_dict[key] = policy_net_state_dict[key] * TAU + \
+                                                                 target_net_state_dict[
+                                                                     key] * (1 - TAU)
+                                agent.target_net.load_state_dict(target_net_state_dict)
 
-                            pass
-                            # this step should be hist = model.fit(X_train, y_train, batch_size=batch_size,
-                            # nb_epoch=1, verbose=0) in the codebase
-                            # https://github.com/imatge-upc/detection-2016-nipsws/blob/master/scripts
-                            # /pool45_crops_training.py#L217
                         input = new_input
                         old_bbox = new_bbox
 
-                        # Soft update of the target network's weights
-                        # θ′ ← τ θ + (1 −τ )θ′
-                        target_net_state_dict = agent.target_net.state_dict()
-                        policy_net_state_dict = agent.policy_net.state_dict()
-                        for key in policy_net_state_dict:
-                            target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[
-                                key] * (1 - TAU)
-                        agent.target_net.load_state_dict(target_net_state_dict)
-
-                    # try:
-                    #     print(str(loss.item()))
-                    # except:
-                    #     pass
-                    agent.optimizer.zero_grad()
-
                 pass
+
             print("Saving epoch model")
             try:
                 path = os.path.normpath(
@@ -452,34 +442,64 @@ if __name__ == "__main__":
         print(s + " has been saved as " + d)
 
     else:
-        red_test_ds, _ = random_split(red_dataset, [int(len(red_dataset)), len(red_dataset) - int(len(red_dataset))])
-        test_loader = torch.utils.data.DataLoader(red_test_ds, batch_size=batch_size, shuffle=True,
+        dataset = RefCOCOg(ds_path=data_path, split='test')
+        red_dataset, _ = random_split(dataset, [int(keep * len(dataset)), len(dataset) - int(keep * len(dataset))])
+        test_loader = torch.utils.data.DataLoader(red_dataset, batch_size=batch_size, shuffle=False,
                                                   collate_fn=lambda x: x)
+        print("samples: " + str(len(red_dataset)))
         print("Instantiating model")
         model_path = os.path.normpath(os.path.join(save_path, 'best_model.pickle'))
         with open(model_path, 'rb') as f:
             agent = pickle.load(f)
         agent.batches = len(test_loader)
+
+        # categories encoding
+        print("Encoding categories")
+        category_encodings = {}
+        for category in dataset.categories.items():
+            cat = category[1]['category']
+            category_encodings[cat] = agent._encode_text("A picture of a " + cat)
+
         device = 'cuda'
         average_iou = 0
         iou = 0
         counter = 0
+
         avg_iou = 0.
         cum_iou = 0.
+
+        cosine = 0
+        avg_cosine = 0
+        cum_cosine = 0
+
+        euclidean_dist = 0
+        avg_euclidean = 0
+        cum_euclidean = 0
+
+        grounding_acc = 0
+        avg_grounding_acc = 0
+        cum_grounding_acc = 0
+
+        dot = 0
+        avg_dot = 0
+        cum_dot = 0
+
         j = 0
         for step, batch in tqdm(enumerate(test_loader)):
-
 
             images = []
             gt_bboxes = []
             initial_bboxes = []
             sentences = []
+            categories = []
             for element in batch:
                 for sentence in element['sentences']:
                     images.append(element['img'])
                     gt_bboxes.append(element['bbox'])
-                    initial_bboxes.append([0,0,element['img'].width, element['img'].height])# get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
+                    initial_bboxes.append([0, 0, element['img'].width, element[
+                        'img'].height])  # get_image_center_bb(image_w=element['img'].width, image_h=element['img'].height))
                     sentences.append(sentence)
+                    categories.append(element['category'])
             print("Predicting batch")
             for i, image in enumerate(images):
                 # 10 step prediction
@@ -502,8 +522,34 @@ if __name__ == "__main__":
                     new_bbox, status = agent.actions[action](new_bbox, agent.alpha)
 
                 iou = IoU(true_bbox=ground_truth, predicted_bbox=new_bbox)
-                j += 1
-                cum_iou += iou
-            avg_iou = cum_iou / j
-            print("Average IoU: " + str(avg_iou))
+                try:
+                    text_enc = agent._encode_text(sentences[i]).float()
+                    crop_enc = agent._encode_img(image.crop(new_bbox)).float()
 
+                    cosine = cosine_similarity(crop_enc, text_enc).item()
+                    euclidean_dist = torch.cdist(text_enc, crop_enc, p=2).squeeze().item()
+                    dot = text_enc @ crop_enc.T
+                    pass
+                    grounding_acc = grounding_accuracy(crop_enc, category_encodings, true_category=categories[i])
+                except ZeroDivisionError:
+                    cosine = 0
+
+                j += 1
+
+                cum_iou += iou
+                cum_cosine += cosine
+                cum_euclidean += euclidean_dist
+                cum_dot += dot[0,0].item()
+                cum_grounding_acc += grounding_acc
+
+            avg_iou = cum_iou / j
+            avg_dot = cum_dot / j
+            avg_cosine = cum_cosine / j
+            avg_euclidean = cum_euclidean / j
+            avg_grounding_acc = cum_grounding_acc / j
+
+            print("Average IoU: " + str(avg_iou))
+            print("Average Dot Product: " + str(avg_dot))
+            print("Average Cosine: " + str(avg_cosine))
+            print("Average Euclidean: " + str(avg_euclidean))
+            print("Average Grounding_acc: " + str(avg_grounding_acc))
