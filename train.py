@@ -80,8 +80,8 @@ def main(args):
 
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
-            image_embeddings = image_embeddings.float()
-            text_embeddings = text_embeddings.float()
+            # image_embeddings = image_embeddings.float()
+            # text_embeddings = text_embeddings.float()
 
             # print(f"[INFO] image_embeddings have {image_embeddings.dtype} precision")
             # print(f"[INFO] text_embeddings have {text_embeddings.dtype} precision")
