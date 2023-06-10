@@ -18,7 +18,9 @@ def main(args):
     device = get_best_device()
 
     # Load the (full) dataset
-    dataset = RefCOCOg(ds_path=args.datapath, transform_img=CLIPImageTransform(), transform_txt=CLIPTextTransform())
+    dataset = RefCOCOg(ds_path=args.datapath, split="train",
+                       transform_img=CLIPImageTransform(),
+                       transform_txt=CLIPTextTransform())
 
     # The `collate_fn` function handles the creation of batched in the dataloader
     def collate_fn(batch_):
