@@ -52,15 +52,6 @@ def main(args):
     # Save a name for the model checkpoint
     model_pt_name = f"ft-clip-{args.clip_version.replace('/', '-')}.pt"
 
-    # Load the model if want to resume training
-    if args.resume:
-        checkpoint = torch.load(model_pt_name)
-        clip_model.load_state_dict(checkpoint['model_state_dict'])
-        last_epoch = checkpoint['epoch']
-        del checkpoint
-        print(f"[INFO] Loaded model from {model_pt_name}")
-    resumed = False
-
     # Freeze all layers except the transformer
     for param in clip_model.parameters():
         param.requires_grad = False
@@ -95,13 +86,6 @@ def main(args):
     print(f"[INFO] Model precision: {clip_model.dtype}")
 
     for epoch in range(args.epochs):
-
-        if args.resume and not resumed:
-            if epoch <= last_epoch:
-                continue
-            else:
-                print(f"\n[INFO] Resuming from epoch #{epoch}")
-                resumed = True
 
         print(f"\n[INFO] Epoch #{epoch}")
 
@@ -153,28 +137,25 @@ def main(args):
         # Closes the logger
         writer.close()
 
-        if __name__ == '__main__':
-            parser = argparse.ArgumentParser(description='Fine tune CLIP on RefCOCOg')
 
-        parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
-                            help='path to the dataset.')
-        parser.add_argument('-e', '--epochs', type=int, default=10,
-                            help='Number of epochs to train the model for')
-        parser.add_argument('-bs', '--batch_size', type=int, default=16,
-                            help='Batch size to use during training')
-        parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
-                            help='Learning rate to use during training')
-        parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
-                            help='CLIP version to use (RN50, RN101, ViT-L/14)')
-        parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
-                            help='Directory where to save the runs')
-        parser.add_argument('-f64', '--f64', action='store_true',
-                            help='Use float64 parameters')
-        parser.add_argument('-wc', '--weight_clipping', action='store_true',
-                            help='Use weight clipping')
-        parser.add_argument('-rs', '--resume', action='store_true',
-                            help='Resume training from last checkpoint')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Fine tune CLIP on RefCOCOg')
 
-        args = parser.parse_args()
+    parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
+                        help='path to the dataset.')
+    parser.add_argument('-e', '--epochs', type=int, default=10,
+                        help='Number of epochs to train the model for')
+    parser.add_argument('-bs', '--batch_size', type=int, default=16,
+                        help='Batch size to use during training')
+    parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
+                        help='Learning rate to use during training')
+    parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
+                        help='CLIP version to use (RN50, RN101, ViT-L/14)')
+    parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
+                        help='Directory where to save the runs')
+    parser.add_argument('-wc', '--weight_clipping', action='store_true',
+                        help='Use weight clipping')
 
-        main(args)
+    args = parser.parse_args()
+
+    main(args)
