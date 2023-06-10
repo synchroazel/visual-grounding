@@ -140,7 +140,7 @@ def main(args):
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), epoch)
 
-        print(f"[INFO] Avg. epoch loss: {torch.mean(torch.tensor(epoch_losses))}")
+        print(f"[INFO] Avg. epoch loss: %.4f" % torch.mean(torch.tensor(epoch_losses)))
 
         # Save the model after each epoch
         torch.save({
@@ -150,32 +150,31 @@ def main(args):
             'loss': torch.mean(torch.tensor(epoch_losses)),
         }, model_pt_name)
 
-    # Closes the logger
-    writer.close()
+        # Closes the logger
+        writer.close()
 
+        if __name__ == '__main__':
+            parser = argparse.ArgumentParser(description='Fine tune CLIP on RefCOCOg')
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Fine tune CLIP on RefCOCOg')
+        parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
+                            help='path to the dataset.')
+        parser.add_argument('-e', '--epochs', type=int, default=10,
+                            help='Number of epochs to train the model for')
+        parser.add_argument('-bs', '--batch_size', type=int, default=16,
+                            help='Batch size to use during training')
+        parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
+                            help='Learning rate to use during training')
+        parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
+                            help='CLIP version to use (RN50, RN101, ViT-L/14)')
+        parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
+                            help='Directory where to save the runs')
+        parser.add_argument('-f64', '--f64', action='store_true',
+                            help='Use float64 parameters')
+        parser.add_argument('-wc', '--weight_clipping', action='store_true',
+                            help='Use weight clipping')
+        parser.add_argument('-rs', '--resume', action='store_true',
+                            help='Resume training from last checkpoint')
 
-    parser.add_argument('-dp', '--datapath', type=str, default="dataset/refcocog",
-                        help='path to the dataset.')
-    parser.add_argument('-e', '--epochs', type=int, default=10,
-                        help='Number of epochs to train the model for')
-    parser.add_argument('-bs', '--batch_size', type=int, default=16,
-                        help='Batch size to use during training')
-    parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
-                        help='Learning rate to use during training')
-    parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
-                        help='CLIP version to use (RN50, RN101, ViT-L/14)')
-    parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
-                        help='Directory where to save the runs')
-    parser.add_argument('-f64', '--f64', action='store_true',
-                        help='Use float64 parameters')
-    parser.add_argument('-wc', '--weight_clipping', action='store_true',
-                        help='Use weight clipping')
-    parser.add_argument('-rs', '--resume', action='store_true',
-                        help='Resume training from last checkpoint')
+        args = parser.parse_args()
 
-    args = parser.parse_args()
-
-    main(args)
+        main(args)
