@@ -81,8 +81,11 @@ def main(args):
     contrastive_loss = ContrastiveLossWithTemperature()
 
     # Define optimizer
-    # optimizer = torch.optim.AdamW(clip_model.parameters(), lr=args.learning_rate)
-    optimizer = torch.optim.Adam(clip_model.parameters(), lr=5e-5, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
+    optimizer = torch.optim.Adam(clip_model.parameters(),
+                                 lr=args.learning_rate,
+                                 betas=(0.9, 0.98),
+                                 eps=1e-6,
+                                 weight_decay=0.2)
 
     # Create a logger for the experiment
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}", )
@@ -160,7 +163,7 @@ if __name__ == '__main__':
                         help='Number of epochs to train the model for')
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='Batch size to use during training')
-    parser.add_argument('-lr', '--learning_rate', type=float, default=1e-5,
+    parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
                         help='Learning rate to use during training')
     parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
                         help='CLIP version to use (RN50, RN101, ViT-L/14)')
