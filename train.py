@@ -35,6 +35,11 @@ def main(args):
 
         return torch.stack(images), torch.stack(texts)
 
+    def convert_models_to_fp32(model):
+        for p in model.parameters():
+            p.data = p.data.float()
+            p.grad.data = p.grad.data.float()
+
     # Instantiate the dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
@@ -42,24 +47,28 @@ def main(args):
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
 
     # Cast the model to float
-    clip_model.float()
+    # clip_model.float()
+
+    if device == torch.device("cpu") or torch.device("mps"):
+        clip_model.float()
+    else:
+        clip.model.convert_weights(clip_model)
 
     # Define loss function
     contrastive_loss = ContrastiveLossWithTemperature()
 
     # Define optimizer
-    optimizer = torch.optim.AdamW(clip_model.parameters(), lr=args.learning_rate)
+    # optimizer = torch.optim.AdamW(clip_model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.Adam(clip_model.parameters(), lr=5e-5, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
     # Create a logger for the experiment
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
-    scaler = torch.cuda.amp.GradScaler()
+    epoch_losses = list()
 
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
-
-        epoch_losses = list()
 
         optimizer.zero_grad()
 
@@ -68,48 +77,48 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-            with torch.autocast(device_type="cuda", dtype=torch.float32):
+            image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
-                image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
+            image_embeddings = image_embeddings.float()
+            text_embeddings = text_embeddings.float()
 
-                # image_embeddings = image_embeddings.float()
-                # text_embeddings = text_embeddings.float()
+            loss = contrastive_loss(image_embeddings, text_embeddings)
 
-                assert image_embeddings.dtype == torch.float16
-                assert text_embeddings.dtype == torch.float16
+            epoch_losses.append(loss)
 
-                loss = contrastive_loss(image_embeddings, text_embeddings)
+            if torch.isnan(loss):
+                print(f"\n[WARN] NaN Loss! Skipping...\n")
+                continue
 
-                assert loss.dtype == torch.float32
+            pbar.set_description("[INFO] Loss %.4f" % loss)
 
-                epoch_losses.append(loss)
+            loss.backward()
 
-                if torch.isnan(loss):
-                    print(f"\n[WARN] NaN Loss! Skipping...\n")
-                    continue
+            if device == torch.device("cpu") or torch.device("mps"):
+                optimizer.step()
+            else:
+                convert_models_to_fp32(clip_model)
+                optimizer.step()
+                clip.model.convert_weights(clip_model)
 
-                pbar.set_description("[INFO] Loss %.4f" % loss)
-
-
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad()
-
-
-            ### Backprop
-
-            # loss.backward()
-            # if args.weight_clipping:
-            #     torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
-            # optimizer.step()
+            if args.weight_clipping:
+                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+            optimizer.step()
 
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
 
         # Save the model after each epoch
-        model_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
-        torch.save(clip_model.state_dict(), model_name)
+
+        torch.save({
+            'epoch': n,
+            'model_state_dict': clip_model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': torch.mean(torch.tensor(epoch_losses)),
+        }, f"ft_clip-{args.clip_version.replace('/', '-')}.pth")
+
+        # model_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
+        # torch.save(clip_model.state_dict(), model_name)
 
     # Closes the logger
     writer.close()
