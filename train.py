@@ -45,8 +45,6 @@ def main(args):
     # Set model precision according to device
     if device == torch.device("cuda"):
         clip_model.double()
-    elif device == torch.device("mps"):
-        clip_model.float()
 
     # if device == torch.device("cpu") or torch.device("mps"):
     #     clip_model.float()
@@ -80,8 +78,9 @@ def main(args):
 
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
-            # image_embeddings = image_embeddings.float()
-            # text_embeddings = text_embeddings.float()
+            if device == torch.device("cuda"):
+                image_embeddings = image_embeddings.double()
+                text_embeddings = text_embeddings.double()
 
             # print(f"[INFO] image_embeddings have {image_embeddings.dtype} precision")
             # print(f"[INFO] text_embeddings have {text_embeddings.dtype} precision")
