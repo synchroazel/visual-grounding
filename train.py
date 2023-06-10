@@ -54,6 +54,8 @@ def main(args):
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
+    scaler = torch.cuda.amp.GradScaler()
+
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
 
@@ -66,7 +68,7 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-            with torch.autocast(device_type=device, dtype=torch.float16):
+            with torch.autocast(device_type="cuda", dtype=torch.float32):
 
                 image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
@@ -88,12 +90,19 @@ def main(args):
 
                 pbar.set_description("[INFO] Loss %.4f" % loss)
 
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+
+
             ### Backprop
 
-            loss.backward()
-            if args.weight_clipping:
-                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
-            optimizer.step()
+            # loss.backward()
+            # if args.weight_clipping:
+            #     torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+            # optimizer.step()
 
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
