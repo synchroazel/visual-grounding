@@ -53,10 +53,6 @@ def main(args):
     datetag = datetime.now().strftime("%m%d%H%M%S")
     writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
 
-    # Set Automatic Mixed Precision
-    if args.mixed_precision:
-        scaler = GradScaler()
-
     for n in range(args.epochs):
         print(f"\n[INFO] Epoch #{n}")
 
