@@ -17,7 +17,7 @@ def main(args):
     device = get_best_device()
 
     # Load the (full) dataset
-    dataset = RefCOCOg(ds_path=args.datapath, split="test",
+    dataset = RefCOCOg(ds_path=args.datapath, split="train",
                        transform_img=CLIPImageTransform(),
                        transform_txt=CLIPTextTransform())
 
@@ -85,7 +85,7 @@ def main(args):
     optimizer = torch.optim.Adam(clip_model.parameters(), lr=5e-5, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
     # Create a logger for the experiment
-    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}")
+    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}", )
 
     epoch_losses = list()
 
