@@ -18,7 +18,8 @@ def main(args):
     # Get the best device for the current machine
     device = get_best_device()
 
-    assert args.mixed_precision and device == "cuda", "Mixed precision training is only supported with CUDA"
+    assert args.mixed_precision and device == torch.device("cuda"),\
+        "Mixed precision training is only supported with CUDA"
 
     # Load the (full) dataset
     dataset = RefCOCOg(ds_path=args.datapath, transform_img=CLIPImageTransform(), transform_txt=CLIPTextTransform())
