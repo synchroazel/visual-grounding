@@ -1,7 +1,6 @@
 import argparse
 
 import clip
-import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torchmultimodal.modules.losses.contrastive_loss_with_temperature import ContrastiveLossWithTemperature
@@ -19,7 +18,6 @@ def main(args):
 
     # Load the (full) dataset
     dataset = RefCOCOg(ds_path=args.datapath, split="train",
-                       transform_img=CLIPImageTransform(),
                        transform_txt=CLIPTextTransform())
 
     # The `collate_fn` function handles the creation of batched in the dataloader
@@ -30,13 +28,11 @@ def main(args):
 
         for sample in batch_:
             for sentence in sample.sentences:
-
+                # Crop the image to the gt bbox
                 image = sample.img.crop(sample.bbox)
+                image = CLIPImageTransform()(image)
 
-                plt.imshow(image)
-                exit(1)
-
-                images.append()
+                images.append(image)
                 texts.append(sentence)
 
         return torch.stack(images), torch.stack(texts)

@@ -106,6 +106,7 @@ class RefCOCOg(Dataset):
         if self.transform_txt:
             sentences = [self.transform_txt(sentence) for sentence in sentences]
 
+        # Get the bounding box
         bbox = torch.tensor(ann_data["bbox"])
         bbox = box_convert(bbox, "xywh", "xyxy").numpy()
 
