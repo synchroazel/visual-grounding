@@ -52,10 +52,10 @@ def main(args):
     # Load the model if want to resume training
     if args.resume:
         checkpoint = torch.load(model_pt_name)
-        checkpoint['model_state_dict']["input_resolution"] = clip_model.input_resolution  # default is 224
-        checkpoint['model_state_dict']["context_length"] = clip_model.context_length  # default is 77
-        checkpoint['model_state_dict']["vocab_size"] = clip_model.vocab_size
-        clip_model.load_state_dict(checkpoint['model_state_dict'])
+        # checkpoint['model_state_dict']["input_resolution"] = clip_model.input_resolution  # default is 224
+        # checkpoint['model_state_dict']["context_length"] = clip_model.context_length  # default is 77
+        # checkpoint['model_state_dict']["vocab_size"] = clip_model.vocab_size
+        clip_model.load_state_dict(checkpoint)#['model_state_dict'])
         last_epoch = checkpoint['epoch']
         del checkpoint
         print(f"[INFO] Loaded model from {model_pt_name}")
