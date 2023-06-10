@@ -1,6 +1,7 @@
 import argparse
 
 import clip
+import matplotlib.pyplot as plt
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torchmultimodal.modules.losses.contrastive_loss_with_temperature import ContrastiveLossWithTemperature
@@ -29,7 +30,13 @@ def main(args):
 
         for sample in batch_:
             for sentence in sample.sentences:
-                images.append(sample.img)
+
+                image = sample.img.crop(sample.bbox)
+
+                plt.imshow(image)
+                exit(1)
+
+                images.append()
                 texts.append(sentence)
 
         return torch.stack(images), torch.stack(texts)
@@ -58,10 +65,7 @@ def main(args):
         print(f"[INFO] Loaded model from {model_pt_name}")
     resumed = False
 
-    trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
-    print(f"[INFO] Trainable parameters: {trainable_params}")
-
-    # Freeze all layers except the last two
+    # Freeze all layers except the transformer
     for param in clip_model.parameters():
         param.requires_grad = False
     for param in clip_model.transformer.parameters():
