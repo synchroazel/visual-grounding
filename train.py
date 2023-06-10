@@ -46,14 +46,19 @@ def main(args):
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
     del _
 
+    # Save a name for the model checkpoint
+    model_pt_name = f"ft-clip-{args.clip_version.replace('/', '-')}.pt"
+
     # Load the model if want to resume training
     if args.resume:
-        checkpoint = torch.load(f"ft-clip-{args.clip_version.replace('/', '-')}.pt")
+        checkpoint = torch.load(model_pt_name)
         checkpoint['model_state_dict']["input_resolution"] = clip_model.input_resolution  # default is 224
         checkpoint['model_state_dict']["context_length"] = clip_model.context_length  # default is 77
         checkpoint['model_state_dict']["vocab_size"] = clip_model.vocab_size
         clip_model.load_state_dict(checkpoint['model_state_dict'])
         last_epoch = checkpoint['epoch']
+        del checkpoint
+        print(f"[INFO] Loaded model from {model_pt_name}")
 
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
@@ -93,6 +98,8 @@ def main(args):
         if args.resume:
             if epoch <= last_epoch:
                 continue
+            else:
+                print(f"\n[INFO] Resuming from epoch #{epoch}")
 
         print(f"\n[INFO] Epoch #{epoch}")
 
@@ -134,13 +141,12 @@ def main(args):
         print(f"[INFO] Avg. epoch loss: {torch.mean(torch.tensor(epoch_losses))}")
 
         # Save the model after each epoch
-
         torch.save({
             'epoch': epoch,
             'model_state_dict': clip_model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': torch.mean(torch.tensor(epoch_losses)),
-        }, f"ft-clip-{args.clip_version.replace('/', '-')}.pt")
+        }, model_pt_name)
 
     # Closes the logger
     writer.close()
