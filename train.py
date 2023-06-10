@@ -3,7 +3,6 @@ from datetime import datetime
 
 import clip
 import torch
-from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torchmultimodal.modules.losses.contrastive_loss_with_temperature import ContrastiveLossWithTemperature
 from torchmultimodal.transforms.clip_transform import CLIPImageTransform, CLIPTextTransform
@@ -17,9 +16,6 @@ from modules.utilities import get_best_device
 def main(args):
     # Get the best device for the current machine
     device = get_best_device()
-
-    assert args.mixed_precision and device == torch.device("cuda"),\
-        "Mixed precision training is only supported with CUDA"
 
     # Load the (full) dataset
     dataset = RefCOCOg(ds_path=args.datapath, transform_img=CLIPImageTransform(), transform_txt=CLIPTextTransform())
@@ -71,18 +67,6 @@ def main(args):
         for batch in pbar:
             image, text = batch
 
-        if args.mixed_precision:
-            with autocast(device_type='cuda', dtype=torch.float16):
-
-                image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
-
-                if args.f64:
-                    image_embeddings = image_embeddings.float()
-                    text_embeddings = text_embeddings.float()
-
-                loss = contrastive_loss(image_embeddings, text_embeddings)
-
-        else:
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
             if args.f64:
@@ -100,23 +84,10 @@ def main(args):
             else:
                 pbar.set_description("[INFO] Loss %.4f" % loss)
 
-                if args.mixed_precision:
-
-                    scaler.scale(loss).backward()
-
-                    if args.weight_clipping:
-                        scaler.unscale_(optimizer)
-                        torch.nn.utils.clip_grad_norm_(clip_model.parameters(), 100.0)
-
-                    scaler.step(optimizer)
-
-                    scaler.update()
-
-                else:
-                    loss.backward()
-                    if args.weight_clipping:
-                        torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
-                    optimizer.step()
+                loss.backward()
+                if args.weight_clipping:
+                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+                optimizer.step()
 
         # Closes the logger
         writer.close()
@@ -145,8 +116,6 @@ if __name__ == '__main__':
                         help='Use float64 parameters')
     parser.add_argument('-wc', '--weight_clipping', action='store_true',
                         help='Use weight clipping')
-    parser.add_argument('-mp', '--mixed_precision', action='store_true',
-                        help='Use automatic mixed precision training')
 
     args = parser.parse_args()
 
