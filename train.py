@@ -40,11 +40,30 @@ def main(args):
             p.data = p.data.float()
             p.grad.data = p.grad.data.float()
 
+
     # Instantiate the dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
     # Instantiate CLIP model
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
+
+
+
+    trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
+    print(f"[INFO] Trainable parameters: {trainable_params}")
+
+    # Freeze all layers except the last two
+    for param in clip_model.parameters():
+        param.requires_grad = False
+    for param in clip_model.transformer.parameters():
+        param.requires_grad = True
+
+    # Check how many layers are trainable
+    trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
+    print(f"[INFO] Trainable parameters: {trainable_params}")
+
+
+
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
@@ -78,9 +97,6 @@ def main(args):
             image, text = batch
 
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
-
-            # print(f"[INFO] image_embeddings have {image_embeddings.dtype} precision")
-            # print(f"[INFO] text_embeddings have {text_embeddings.dtype} precision")
 
             loss = contrastive_loss(image_embeddings, text_embeddings)
 
