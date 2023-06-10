@@ -56,6 +56,7 @@ def main(args):
         last_epoch = checkpoint['epoch']
         del checkpoint
         print(f"[INFO] Loaded model from {model_pt_name}")
+    resumed = False
 
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
@@ -92,11 +93,12 @@ def main(args):
 
     for epoch in range(args.epochs):
 
-        if args.resume:
+        if args.resume and not resumed:
             if epoch <= last_epoch:
                 continue
             else:
                 print(f"\n[INFO] Resuming from epoch #{epoch}")
+                resumed = True
 
         print(f"\n[INFO] Epoch #{epoch}")
 
