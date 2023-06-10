@@ -47,7 +47,7 @@ def main(args):
     del _
 
     # Save a name for the model checkpoint
-    model_pt_name = f"ft-clip-{args.clip_version.replace('/', '-')}.pt"
+    model_pt_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
 
     # Load the model if want to resume training
     if args.resume:
