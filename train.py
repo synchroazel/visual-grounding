@@ -1,5 +1,4 @@
 import argparse
-from datetime import datetime
 
 import clip
 import torch
@@ -11,7 +10,6 @@ from tqdm import tqdm
 from modules.refcocog import RefCOCOg
 from modules.refcocog import RefCOCOgSample
 from modules.utilities import get_best_device
-
 
 
 def main(args):
@@ -41,14 +39,21 @@ def main(args):
             p.data = p.data.float()
             p.grad.data = p.grad.data.float()
 
-
     # Instantiate the dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
     # Instantiate CLIP model
     clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
+    del _
 
-
+    # Load the model if want to resume training
+    if args.resume:
+        checkpoint = torch.load(f"ft-clip-{args.clip_version.replace('/', '-')}.pt")
+        checkpoint['model_state_dict']["input_resolution"] = clip_model.input_resolution  # default is 224
+        checkpoint['model_state_dict']["context_length"] = clip_model.context_length  # default is 77
+        checkpoint['model_state_dict']["vocab_size"] = clip_model.vocab_size
+        clip_model.load_state_dict(checkpoint['model_state_dict'])
+        last_epoch = checkpoint['epoch']
 
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
@@ -62,17 +67,6 @@ def main(args):
     # Check how many layers are trainable
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
-
-
-# instantiate model. Here we use clip with vit-L as the image encoder
-# model, _ = clip.load("ViT-L/14", device=device)
-model, _ = clip.load("RN101", device=device)
-
-model = model.float()
-del _
-# define loss and other things needed for training
-contrastive_loss = ContrastiveLossWithTemperature()
-
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
@@ -88,18 +82,21 @@ contrastive_loss = ContrastiveLossWithTemperature()
     optimizer = torch.optim.Adam(clip_model.parameters(), lr=5e-5, betas=(0.9, 0.98), eps=1e-6, weight_decay=0.2)
 
     # Create a logger for the experiment
-    datetag = datetime.now().strftime("%m%d%H%M%S")
-    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}-{datetag}")
+    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}")
 
-
+    epoch_losses = list()
 
     print(f"[INFO] Model precision: {clip_model.dtype}")
 
-    for n in range(args.epochs):
-        print(f"\n[INFO] Epoch #{n}")
+    for epoch in range(args.epochs):
+
+        if args.resume:
+            if epoch <= last_epoch:
+                continue
+
+        print(f"\n[INFO] Epoch #{epoch}")
 
         optimizer.zero_grad()
-
 
         pbar = tqdm(dataloader, desc="[INFO] Loss N/A", leave=True)
 
@@ -132,16 +129,18 @@ contrastive_loss = ContrastiveLossWithTemperature()
                 clip.model.convert_weights(clip_model)
 
         # Log to tensorboard
-        writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), n)
+        writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), epoch)
+
+        print(f"[INFO] Avg. epoch loss: {torch.mean(torch.tensor(epoch_losses))}")
 
         # Save the model after each epoch
 
         torch.save({
-            'epoch': n,
+            'epoch': epoch,
             'model_state_dict': clip_model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': torch.mean(torch.tensor(epoch_losses)),
-        }, f"ft_clip-{args.clip_version.replace('/', '-')}.pth")
+        }, f"ft-clip-{args.clip_version.replace('/', '-')}.pt")
 
     # Closes the logger
     writer.close()
@@ -170,4 +169,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args)
-
