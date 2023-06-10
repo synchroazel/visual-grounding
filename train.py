@@ -17,10 +17,18 @@ def main(args):
     # Get the best device for the current machine
     device = get_best_device()
 
+    # Instantiate CLIP model
+    clip_model, clip_prep = clip.load(args.clip_version, device=device, jit=False)
+
+    def prep_text(text):
+        return clip.tokenize(text).to(device)
+
+    def prep_img(image):
+        return clip_prep(image).unsqueeze(0).to(device)
+
     # Load the (full) dataset
-    dataset = RefCOCOg(ds_path=args.datapath, split="train",
-                       transform_img=CLIPImageTransform(),
-                       transform_txt=CLIPTextTransform())
+    dataset = RefCOCOg(ds_path=args.datapath,
+                       split="train", )  # transform_img=CLIPImageTransform(), transform_txt=CLIPTextTransform())
 
     # The `collate_fn` function handles the creation of batched in the dataloader
     def collate_fn(batch_):
@@ -42,9 +50,6 @@ def main(args):
 
     # Instantiate the dataloader
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
-
-    # Instantiate CLIP model
-    clip_model, _ = clip.load(args.clip_version, device=device, jit=False)
 
     # Cast the model to float
     # clip_model.float()
@@ -76,6 +81,9 @@ def main(args):
 
         for batch in pbar:
             image, text = batch
+
+            image = prep_img(image)
+            text = prep_text(text)
 
             image_embeddings, text_embeddings = clip_model(image.to(device), text.to(device))
 
