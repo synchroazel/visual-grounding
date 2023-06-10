@@ -165,12 +165,14 @@ if __name__ == '__main__':
                         help='Learning rate to use during training')
     parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
                         help='CLIP version to use (RN50, RN101, ViT-L/14)')
-    parser.add_argument('-r', '--runs_dir', type=str, default="runs",
+    parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
                         help='Directory where to save the runs')
     parser.add_argument('-f64', '--f64', action='store_true',
                         help='Use float64 parameters')
     parser.add_argument('-wc', '--weight_clipping', action='store_true',
                         help='Use weight clipping')
+    parser.add_argument('-rs', '--resume', action='store_true',
+                        help='Resume training from last checkpoint')
 
     args = parser.parse_args()
 
