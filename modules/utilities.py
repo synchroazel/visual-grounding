@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from refcocog import RefCOCOgSample
+from modules.refcocog import RefCOCOgSample
 
 OPTIMIZERS_TO_TRY = {
     "SGD": torch.optim.SGD,

@@ -6,7 +6,6 @@ import re
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision import transforms
 from torchvision.ops.boxes import box_convert
 
 
