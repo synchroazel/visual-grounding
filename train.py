@@ -62,6 +62,14 @@ def main(args):
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
 
+    # Load the model checkpoint if requested
+    if args.resume:
+        checkpoint = torch.load(model_pt_name)
+        clip_model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"[INFO] Loaded fine-tuned CLIP model from {model_pt_name}.")
+    resumed = False
+    last_epoch = checkpoint.epoch
+
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
         clip_model.float()
@@ -86,6 +94,12 @@ def main(args):
     print(f"[INFO] Model precision: {clip_model.dtype}")
 
     for epoch in range(args.epochs):
+
+        if epoch < last_epoch and resumed == False:
+            continue
+        else:
+            resumed = True
+            print(f"\n[INFO] Resuming from epoch {last_epoch}")
 
         print(f"\n[INFO] Epoch #{epoch}")
 
