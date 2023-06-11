@@ -169,6 +169,8 @@ if __name__ == '__main__':
                         help='Directory where to save the runs')
     parser.add_argument('-wc', '--weight_clipping', action='store_true',
                         help='Use weight clipping')
+    parser.add_argument('-r', '--resume', action='store_true',
+                        help='Resume training from the last checkpoint')
 
     args = parser.parse_args()
 
