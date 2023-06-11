@@ -70,9 +70,8 @@ def main(args):
         print("\n\n")
         clip_model.load_state_dict(checkpoint['model_state_dict'])
         print(f"[INFO] Loaded fine-tuned CLIP model from {model_pt_name}.")
-        last_epoch = checkpoint.epoch
+        last_epoch = checkpoint['epoch']
     resumed = False
-
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
