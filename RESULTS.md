@@ -1,27 +1,48 @@
-# Results
+| YOLO+CLIP pipelines    | avg. IoU | avg. cosine sim. | avg. euclidean dist. | avg. grounding acc. |
+|:-----------------------|:--------:|:----------------:|:--------------------:|:-------------------:|
+| YOLOv8x+CLIP(RN50)     |  0.554   |      0.238       |        1.234         |        0.353        |
+| YOLOv8x+CLIP(RN101)    |  0.550   |     0.459 *      |       1.040 *        |        0.486        |
+| YOLOv8x+CLIP(ViT-L/14) |  0.552   |      0.254       |        1.221         |      0.520 **       |
+| YOLOv5s+CLIP(RN50)     |  0.552   |      0.238       |        1.234         |        0.495        |
+| YOLOv5s+CLIP(RN101)    |  0.550   |      0.238       |        1.235         |        0.496        |
+| YOLOv5s+CLIP(ViT-L/14) |  0.533   |      0.253       |        1.222         |        0.515        |
 
-| Pipeline               | Avg. IoU | Avg. cosine sim. | Avg. euclidean dist. | Avg. grounding acc. |
-|------------------------|----------|------------------|----------------------|---------------------|
-| YOLOv8x+CLIP(RN50)     | 0.554    | 0.238            | 1.234                | 0.353               |
-| YOLOv8x+CLIP(RN101)    | 0.550    | 0.459 *          | 1.040 *              | 0.486               |
-| YOLOv8x+CLIP(ViT-L/14) | 0.552    | 0.254            | 1.221                | 0.520 **            |
-| YOLOv5s+CLIP(RN50)     | 0.552    | 0.238            | 1.234                | 0.495               |
-| YOLOv5s+CLIP(RN101)    | 0.550    | 0.238            | 1.235                | 0.496               |
-| YOLOv5s+CLIP(ViT-L/14) | 0.533    | 0.253            | 1.222                | 0.515               |
-|                        |          |                  |                      |                     |
-| W.SHED+CLIP(ViT-L/14)  | 0.219    | 0.243            | 1.230                | 0.525 *             |
-| SLIC+CLIP(ViT-L/14)    | 0.180    | 0.228            | 1.242                | 0.373               |
-|                        |          |                  |                      |                     |
-| SSD+CLIP(RN50)         | 0.162    | 0.245            | 1.228                | 0.440               |
-| SSD+CLIP(RN50) mine    | 0.175    | 0.217            | 1.251                | 0.355               |
-| SSD+CLIP(RN101)        | 0.172    | 0.442            | 1.056                | 0.365               |
-| SSD+CLIP(ViT-L/14)     | 0.171    | 0.225            | 1.245                | 0.400               |
-|                        |          |                  |                      |                     |
-| DETR+CLIP(RN50)        | 0.560 ** | 0.237            | 1.235                | 0.496               |
-| DETR+CLIP(RN101)       | 0.547    | 0.458 **         | 1.041 **             | 0.482               |
-| DETR+CLIP(ViT-L/14)    | 0.537    | 0.252            | 1.223                | 0.514               |
-|                        |          |                  |                      |                     |
-| MDETR (CLIPw/RN50)     | 0.617 *  | 0.225            | 1.244                | 0.483               |
+<br>
 
-`* best`
-`** second best`
+| Seg. pipelines        | avg. IoU | avg. cosine sim. | avg. euclidean dist. | avg. grounding acc. |
+|:----------------------|:--------:|:----------------:|:--------------------:|:-------------------:|
+| W.SHED+CLIP(ViT-L/14) |  0.219   |      0.243       |        1.230         |       0.525 *       |
+| SLIC+CLIP(ViT-L/14)   |  0.180   |      0.228       |        1.242         |        0.373        |
+
+<br>
+
+| SSD pipelines      | avg. IoU | avg. cosine sim. | avg. euclidean dist. | avg. grounding acc. |
+|:-------------------|:--------:|:----------------:|:--------------------:|:-------------------:|
+| SSD+CLIP(RN50)     |  0.162   |      0.245       |        1.228         |        0.440        |
+| SSD+CLIP(RN101)    |  0.172   |      0.442       |        1.056         |        0.365        |
+| SSD+CLIP(ViT-L/14) |  0.171   |      0.225       |        1.245         |        0.400        |
+
+<br>
+
+| DETR pipelines      | avg. IoU | avg. cosine sim. | avg. euclidean dist. | avg. grounding acc. |
+|:--------------------|:--------:|:----------------:|:--------------------:|:-------------------:|
+| DETR+CLIP(RN50)     | 0.560 ** |      0.237       |        1.235         |        0.496        |
+| DETR+CLIP(RN101)    |  0.547   |     0.458 **     |       1.041 **       |        0.482        |
+| DETR+CLIP(ViT-L/14) |  0.537   |      0.252       |        1.223         |        0.514        |
+
+<br>
+
+| MDETR              | avg. IoU | avg. cosine sim. | avg. euclidean dist. | avg. grounding acc. |
+|:-------------------|:--------:|:----------------:|:--------------------:|:-------------------:|
+| MDETR (CLIPw/RN50) | 0.617 *  |      0.225       |        1.244         |        0.483        |
+
+<br>
+
+| Reinforcement Learning  | Avg. IoU | Avg. cosine sim. | Avg. euclidean dist. | Avg. dotproduct | Avg. grounding acc. |
+|:------------------------|----------|------------------|----------------------|-----------------|---------------------|
+| CLIP + Reinforcement L. | 0.07     | 0.401            | 1.089                | 0.406           | 0.226               |
+
+<br>
+
+`*` best
+`**` second best

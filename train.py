@@ -18,7 +18,6 @@ def main(args):
 
     # Load the (full) dataset
     dataset = RefCOCOg(ds_path=args.datapath, split="train",
-                       transform_img=CLIPImageTransform(),
                        transform_txt=CLIPTextTransform())
 
     # The `collate_fn` function handles the creation of batched in the dataloader
@@ -29,7 +28,11 @@ def main(args):
 
         for sample in batch_:
             for sentence in sample.sentences:
-                images.append(sample.img)
+                # Crop the image to the gt bbox
+                image = sample.img.crop(sample.bbox)
+                image = CLIPImageTransform()(image)
+
+                images.append(image)
                 texts.append(sentence)
 
         return torch.stack(images), torch.stack(texts)
@@ -47,21 +50,9 @@ def main(args):
     del _
 
     # Save a name for the model checkpoint
-    model_pt_name = f"ft_clip-{args.clip_version.replace('/', '-')}.pth"
+    model_pt_name = f"ft-clip-{args.clip_version.replace('/', '-')}.pt"
 
-    # Load the model if want to resume training
-    if args.resume:
-        checkpoint = torch.load(model_pt_name)
-        clip_model.load_state_dict(checkpoint['model_state_dict'])
-        last_epoch = checkpoint['epoch']
-        del checkpoint
-        print(f"[INFO] Loaded model from {model_pt_name}")
-    resumed = False
-
-    trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
-    print(f"[INFO] Trainable parameters: {trainable_params}")
-
-    # Freeze all layers except the last two
+    # Freeze all layers except the transformer
     for param in clip_model.parameters():
         param.requires_grad = False
     for param in clip_model.transformer.parameters():
@@ -70,6 +61,14 @@ def main(args):
     # Check how many layers are trainable
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
     print(f"[INFO] Trainable parameters: {trainable_params}")
+
+    # Load the model checkpoint if requested
+    if args.resume:
+        checkpoint = torch.load(model_pt_name)
+        clip_model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"[INFO] Loaded fine-tuned CLIP model from {model_pt_name}.")
+        last_epoch = checkpoint['epoch']
+    resumed = False
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
@@ -96,12 +95,11 @@ def main(args):
 
     for epoch in range(args.epochs):
 
-        if args.resume and not resumed:
-            if epoch <= last_epoch:
-                continue
-            else:
-                print(f"\n[INFO] Resuming from epoch #{epoch}")
-                resumed = True
+        if epoch < last_epoch and resumed == False:
+            continue
+        else:
+            resumed = True
+            print(f"\n[INFO] Resuming from epoch {last_epoch}")
 
         print(f"\n[INFO] Epoch #{epoch}")
 
@@ -140,7 +138,7 @@ def main(args):
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), epoch)
 
-        print(f"[INFO] Avg. epoch loss: {torch.mean(torch.tensor(epoch_losses))}")
+        print(f"[INFO] Avg. epoch loss: %.4f" % torch.mean(torch.tensor(epoch_losses)))
 
         # Save the model after each epoch
         torch.save({
@@ -150,8 +148,8 @@ def main(args):
             'loss': torch.mean(torch.tensor(epoch_losses)),
         }, model_pt_name)
 
-    # Closes the logger
-    writer.close()
+        # Closes the logger
+        writer.close()
 
 
 if __name__ == '__main__':
@@ -169,12 +167,10 @@ if __name__ == '__main__':
                         help='CLIP version to use (RN50, RN101, ViT-L/14)')
     parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
                         help='Directory where to save the runs')
-    parser.add_argument('-f64', '--f64', action='store_true',
-                        help='Use float64 parameters')
     parser.add_argument('-wc', '--weight_clipping', action='store_true',
                         help='Use weight clipping')
-    parser.add_argument('-rs', '--resume', action='store_true',
-                        help='Resume training from last checkpoint')
+    parser.add_argument('-r', '--resume', action='store_true',
+                        help='Resume training from the last checkpoint')
 
     args = parser.parse_args()
 
