@@ -52,23 +52,20 @@ def main(args):
     # Save a name for the model checkpoint
     model_pt_name = f"ft-clip-{args.clip_version.replace('/', '-')}.pt"
 
-    # Freeze all layers except the transformer
-    for param in clip_model.parameters():
-        param.requires_grad = False
-    for param in clip_model.transformer.parameters():
-        param.requires_grad = True
+    # Freeze all layers except the block to train
+    all_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
+    print(f"[INFO] Total parameters: {all_params}")
+    if args.train_block is not None:
+        print(f"[INFO] Freezing all layers except `{args.train_block}`")
+        for param in clip_model.parameters():
+            param.requires_grad = False
+        for param in clip_model.__getattr__(args.train_block).parameters():
+            param.requires_grad = True
 
     # Check how many layers are trainable
     trainable_params = sum(p.numel() for p in clip_model.parameters() if p.requires_grad)
-    print(f"[INFO] Trainable parameters: {trainable_params}")
-
-    # Load the model checkpoint if requested
-    if args.resume:
-        checkpoint = torch.load(model_pt_name)
-        clip_model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"[INFO] Loaded fine-tuned CLIP model from {model_pt_name}.")
-        last_epoch = checkpoint['epoch']
-    resumed = False
+    trainable_perc = round(trainable_params / all_params * 100)
+    print(f"[INFO] Trainable parameters: {trainable_params} ({trainable_perc}% of total params)")
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
@@ -87,19 +84,13 @@ def main(args):
                                  weight_decay=0.2)
 
     # Create a logger for the experiment
-    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}", )
+    writer = SummaryWriter(log_dir=f"{args.runs_dir}/clip-ft-{args.clip_version}")
 
     epoch_losses = list()
 
     print(f"[INFO] Model precision: {clip_model.dtype}")
 
     for epoch in range(args.epochs):
-
-        if epoch < last_epoch and resumed == False:
-            continue
-        else:
-            resumed = True
-            print(f"\n[INFO] Resuming from epoch {last_epoch}")
 
         print(f"\n[INFO] Epoch #{epoch}")
 
@@ -125,13 +116,11 @@ def main(args):
             loss.backward()
 
             if device == torch.device("cpu") or torch.device("mps"):
-                if args.weight_clipping:
-                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
                 optimizer.step()
             else:
                 convert_models_to_fp32(clip_model)
-                if args.weight_clipping:
-                    torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
+                torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
                 optimizer.step()
                 clip.model.convert_weights(clip_model)
 
@@ -163,14 +152,12 @@ if __name__ == '__main__':
                         help='Batch size to use during training')
     parser.add_argument('-lr', '--learning_rate', type=float, default=5e-5,
                         help='Learning rate to use during training')
-    parser.add_argument('-cv', '--clip_version', type=str, default="RN50",
+    parser.add_argument('-cv', '--clip_version', type=str,
                         help='CLIP version to use (RN50, RN101, ViT-L/14)')
     parser.add_argument('-rd', '--runs_dir', type=str, default="runs",
                         help='Directory where to save the runs')
-    parser.add_argument('-wc', '--weight_clipping', action='store_true',
-                        help='Use weight clipping')
-    parser.add_argument('-r', '--resume', action='store_true',
-                        help='Resume training from the last checkpoint')
+    parser.add_argument('-tb', '--train_block', type=str,
+                        help='CLIP block to train (input nothing to train the whole CLIP')
 
     args = parser.parse_args()
 
