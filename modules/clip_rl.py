@@ -291,9 +291,10 @@ if __name__ == "__main__":
 
 
     # keep only a toy portion of each split
-    batch_size = 128
+    batch_size = 256
     keep = 1
-    train = True
+    train = False
+
     maximum_steps = 10
 
     if train:
@@ -305,7 +306,7 @@ if __name__ == "__main__":
         del _
 
         device = 'cuda'
-        epochs = 1
+        epochs = 3
         GAMMA = 0.99
         TAU = 0.005
         memory_pointer = -1
@@ -508,7 +509,7 @@ if __name__ == "__main__":
         cum_dot = 0
 
         j = 0
-        for step, batch in tqdm(enumerate(test_loader)):
+        for b, batch in tqdm(enumerate(test_loader)):
 
             images = []
             gt_bboxes = []
@@ -531,15 +532,10 @@ if __name__ == "__main__":
                 ground_truth = gt_bboxes[i]
 
                 new_bbox = initial_bboxes[i]
+                embedding = agent.encoder(image, sentences[i])
                 while step < 10 and status:
                     step += 1
-                    try:
-                        embedding = agent.encoder(image.crop(new_bbox), sentences[i])
-                    except ZeroDivisionError:
-                        print(action)
-                        print(new_bbox)
-                        break
-                    input = agent.get_state(clip_embedding=embedding).squeeze()
+                    input = agent.get_state(clip_embedding=embedding, bbox=new_bbox).squeeze()
                     q = agent.policy_net.forward(input)
                     action = agent.possible_actions[torch.argmax(q)]
                     new_bbox, status = agent.actions[action](new_bbox, agent.alpha)
