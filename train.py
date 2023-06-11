@@ -65,10 +65,14 @@ def main(args):
     # Load the model checkpoint if requested
     if args.resume:
         checkpoint = torch.load(model_pt_name)
+        print("\n\n")
+        print(checkpoint)
+        print("\n\n")
         clip_model.load_state_dict(checkpoint['model_state_dict'])
         print(f"[INFO] Loaded fine-tuned CLIP model from {model_pt_name}.")
+        last_epoch = checkpoint.epoch
     resumed = False
-    last_epoch = checkpoint.epoch
+
 
     # Set model precision according to device
     if device == torch.device("cpu") or torch.device("mps"):
