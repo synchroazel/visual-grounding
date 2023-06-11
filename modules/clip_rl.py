@@ -139,7 +139,7 @@ def grounding_accuracy(img_encoding, category_encodings: dict, true_category: st
 
 class RL_Clip(nn.Module):
     def __init__(self, actions=("left", 'right', 'top', 'down', 'bigger', 'smaller', 'fatter', 'taller', 'trigger'),
-                 clip_ver="RN101", device='cuda',
+                 clip_ver="RN50", device='cuda',
                  maximum_past_actions_memory=10, random_factor=0.9, *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -176,8 +176,13 @@ class RL_Clip(nn.Module):
         self.replay = []
         # G_state = G_state + α(target — G_state)
 
-        self.policy_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory, len(actions)).to(device)
-        self.target_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory, len(actions)).to(device)
+        # clip output * 2 + action memory + past bbox
+        if clip_ver == "RN101":
+            self.policy_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory + 4, len(actions)).to(device)
+            self.target_net = DQN(512 * 2 + len(actions) * self.maximum_past_actions_memory + 4, len(actions)).to(device)
+        else:
+            self.policy_net = DQN(1024 * 2 + len(actions) * self.maximum_past_actions_memory + 4, len(actions)).to(device)
+            self.target_net = DQN(1024 * 2 + len(actions) * self.maximum_past_actions_memory + 4, len(actions)).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=self.lr, amsgrad=True)
@@ -226,12 +231,16 @@ class RL_Clip(nn.Module):
         else:
             return -self.trigger_final_reward
 
-    def get_state(self, clip_embedding):
+    def get_state(self, clip_embedding, bbox=None):
         clip_embedding = clip_embedding.to(self.device)
         history_vector = torch.reshape(self.past_actions,
                                        (len(self.possible_actions) * self.maximum_past_actions_memory, 1)).to(
             self.device)
-        state = torch.vstack((clip_embedding.T, history_vector))
+        if bbox is not None:
+            bbox = torch.tensor(bbox).unsqueeze(1).to(self.device)
+            state = torch.vstack((clip_embedding.T, history_vector, bbox))
+        else:
+            state = torch.vstack((clip_embedding.T, history_vector))
         return state.to(self.device)
 
     def _encode_text(self, text):
@@ -284,7 +293,7 @@ if __name__ == "__main__":
     # keep only a toy portion of each split
     batch_size = 128
     keep = 1
-    train = False
+    train = True
     maximum_steps = 10
 
     if train:
@@ -296,15 +305,15 @@ if __name__ == "__main__":
         del _
 
         device = 'cuda'
-        epochs = 10
+        epochs = 1
         GAMMA = 0.99
         TAU = 0.005
         memory_pointer = -1
         BB_LENGTH_LIMIT = 10  # if a BB is smaller than 10x10, the agent is penalized
         for epoch in tqdm(range(epochs)):
             epsilon = 1
-            for step, batch in enumerate(train_loader):
-                print("Batch " + str(step))
+            for b, batch in enumerate(train_loader):
+                print("Batch " + str(b))
                 print("Calculating batch embeddings")
                 embeddings = []
                 gt_bboxes = []
@@ -331,7 +340,7 @@ if __name__ == "__main__":
                     # status indicates whether the agent is still alive and has not triggered the terminal action
                     status = True
                     action = 0
-                    input = agent.get_state(clip_embedding=embedding)
+                    input = agent.get_state(clip_embedding=embedding, bbox = old_bbox)
                     while status and (step < maximum_steps):
                         action = agent.choose_action(old_bbox, bbox)
                         new_bbox, status = agent.actions[action](old_bbox, agent.alpha)
@@ -344,22 +353,25 @@ if __name__ == "__main__":
                         agent.update_history_vector(action)
                         step += 1
 
+                        # without bb encoding
                         # special cases
-                        try:
-                            new_img = image.crop(new_bbox)
-                        except PIL.Image.DecompressionBombError:
-                            # the image is too big
-                            new_img = image
-                            reward = -agent.trigger_final_reward
+                        # try:
+                        #     new_img = image.crop(new_bbox)
+                        # except PIL.Image.DecompressionBombError:
+                        #     # the image is too big
+                        #     new_img = image
+                        #     reward = -agent.trigger_final_reward
                         # the image is too small
-                        if ((new_bbox[2] - new_bbox[0]) < BB_LENGTH_LIMIT) or (
-                                (new_bbox[3] - new_bbox[1]) < BB_LENGTH_LIMIT):
-                            reward = -agent.trigger_final_reward
-                        try:
-                            encoding = agent.encoder(new_img, sentences[i])
-                        except ZeroDivisionError:
-                            encoding = agent.encoder(image, sentences[i])
-                        new_input = agent.get_state(encoding)
+                        # if ((new_bbox[2] - new_bbox[0]) < BB_LENGTH_LIMIT) or (
+                        #         (new_bbox[3] - new_bbox[1]) < BB_LENGTH_LIMIT):
+                        #     reward = -agent.trigger_final_reward
+                        # try:
+                        #     encoding = agent.encoder(new_img, sentences[i])
+                        # except ZeroDivisionError:
+                        #     encoding = agent.encoder(image, sentences[i])
+                        # new_input = agent.get_state(encoding)
+
+                        new_input = agent.get_state(embedding, bbox=new_bbox)
 
                         # Experience replay storage
                         if len(agent.replay) < agent.buffer_experience_replay:
@@ -417,7 +429,18 @@ if __name__ == "__main__":
                         input = new_input
                         old_bbox = new_bbox
 
-                pass
+
+                try:
+
+                    if b % 50 == 0:
+                        print("Saving intra epoch model")
+                        path = os.path.normpath(
+                            os.path.join(save_path, "rl_batch_" + str(b) + "|" + str(loss.item())))
+                        with open(path, 'wb') as f:
+                            pickle.dump(agent, f)
+                            print("Model saved as: " + path)
+                except NameError:
+                    pass
 
             print("Saving epoch model")
             try:
