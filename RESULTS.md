@@ -38,9 +38,9 @@
 
 <br>
 
-| Reinforcement Learning  | Avg. IoU | Avg. cosine sim. | Avg. euclidean dist. | Avg. dotproduct | Avg. grounding acc. |
-|:------------------------|----------|------------------|----------------------|-----------------|---------------------|
-| CLIP + Reinforcement L. | 0.07     | 0.401            | 1.089                | 0.406           | 0.226               |
+| Reinforcement Learning  | Avg. IoU | Avg. cosine sim. | Avg. euclidean dist. | Avg. grounding acc. |
+|:------------------------|----------|------------------|----------------------|---------------------|
+| CLIP + Reinforcement L. | 0.12     | 0.196            | 1.268                | 0.305               |
 
 <br>
 

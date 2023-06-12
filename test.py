@@ -93,7 +93,7 @@ def main(args):
                            device=device)
 
     if args.clip_pth is not None:
-        checkpoint = torch.load(args.clip_pth)
+        checkpoint = torch.load(args.clip_pth, map_location=device)
         pipeline.clip_model.load_state_dict(checkpoint['model_state_dict'])
         print(f"[INFO] Fine-tuned CLIP model loaded from {args.clip_pth}.")
 

@@ -109,7 +109,7 @@ def main(args):
 
             if torch.isnan(loss):
                 print(f"\n[WARN] NaN Loss! Skipping...\n")
-                continue
+                # continue
 
             pbar.set_description("[INFO] Loss %.4f" % loss)
 
@@ -123,6 +123,9 @@ def main(args):
                 torch.nn.utils.clip_grad_value_(clip_model.parameters(), clip_value=100.0)
                 optimizer.step()
                 clip.model.convert_weights(clip_model)
+
+        # Ignore NaN losses
+        epoch_losses = [x for x in epoch_losses if not torch.isnan(x)]
 
         # Log to tensorboard
         writer.add_scalar(f"loss", torch.mean(torch.tensor(epoch_losses)), epoch)

@@ -10,10 +10,6 @@ from torchvision.ops.boxes import box_convert
 
 
 class RefCOCOgSample:
-    """
-    An annotated image from RefCOCOg dataset.
-
-    """
 
     def __init__(self,
                  img: Image.Image,
@@ -40,10 +36,6 @@ class RefCOCOgSample:
 
 
 class RefCOCOg(Dataset):
-    """
-    Dataset object for RefCOCOg dataset.
-
-    """
 
     def __init__(self, ds_path: str, split=None, transform_img=None, transform_txt=None):
         super(RefCOCOg, self).__init__()

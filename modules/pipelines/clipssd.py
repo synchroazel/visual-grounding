@@ -95,7 +95,7 @@ class ClipSSD(VisualGroundingPipeline):
         img = img_sample.img
 
         # Use SSD to propose relevant objects
-        bboxes = self._propose(image_path, (img_sample.shape[1], img_sample.shape[2]))
+        bboxes = self._propose(image_path, (img.shape[1], img.shape[2]))
 
         # Handle case where no object is proposed
         if len(bboxes) == 0:
